@@ -4,16 +4,6 @@ MPU6050 Sensor Module
 ======================
 Functions to initialize and read data from MPU6050 (gyroscope + accelerometer),
 calculate tilt angles, and save data to CSV in the 'data/' folder.
-
-Project Structure:
-    project_root/
-    ├── config/
-    ├── data/          ← CSV files saved here
-    ├── logs/
-    ├── main.py
-    ├── src/
-    │   └── mpu6050_sensor.py
-    └── ...
 """
 
 import smbus
@@ -112,7 +102,7 @@ def read_sensor_data(address=DEFAULT_ADDRESS):
     }
 
 
-def save_data_to_csv(data, filename="mpu6050_log.csv"):
+def save_data(data, filename="mpu6050_log.csv"):
     """
     Save sensor data to CSV file in data/ folder.
     Appends new row. Creates file with header if not exists.
@@ -137,25 +127,24 @@ def save_data_to_csv(data, filename="mpu6050_log.csv"):
 
     file_exists = file_path.exists()
 
-    with open(file_path, mode='a', newline='') as f:
+    with open(file_path, mode='a', newline='', buffering=1) as f:
         writer = csv.DictWriter(f, fieldnames=row.keys())
         if not file_exists:
             writer.writeheader()
         writer.writerow(row)
 
 
-# === Example usage (for testing when run directly) ===
 if __name__ == "__main__":
     init_sensor()
     print(f"Logging data to: {DATA_DIR / 'mpu6050_log.csv'}")
     try:
         while True:
             data = read_sensor_data()
-            save_data_to_csv(data)
+            save_data(data)
             print(f"[{data['timestamp']}] "
                   f"Gyro: ({data['gyroscope']['x']:.2f}, {data['gyroscope']['y']:.2f}, {data['gyroscope']['z']:.2f}) | "
                   f"Accel: ({data['accelerometer']['x']:.3f}, {data['accelerometer']['y']:.3f}, {data['accelerometer']['z']:.3f}) | "
                   f"Rot: X={data['rotation']['x']:.1f}°, Y={data['rotation']['y']:.1f}°")
-            time.sleep(0.1)  # 10 Hz logging
+            time.sleep(2)   
     except KeyboardInterrupt:
         print("\nLogging stopped.")
