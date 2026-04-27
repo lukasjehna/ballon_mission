@@ -1,0 +1,74 @@
+# Ballon Mission Controller
+
+## Structure
+- `src/` python source code
+- `config/` mission settings
+- `data/` telemetry and data saved during the mission
+- `logs/` Event and debug logs
+
+## Run measurement
+# in interactive mode
+./run_all.sh
+In this measurement, no distinction is made between cold load and signal.
+# use systemd:
+you can also use run_services to start the measurement now or enable measurements on startup.
+The manual setup for this is explained in the following:
+sudo systemctl start balloon-main.service
+
+## Use Autostart
+# Add these services under /etc/systemd/system/<balloon-chopper-udp.service> 
+sudo systemctl daemon-reload
+
+# optional: enable all UDP servers individually
+sudo systemctl enable balloon-chopper-udp.service \
+                     balloon-pressure-udp.service \
+                     balloon-temperature-udp.service \
+                     balloon-gyro-udp.service \
+                     balloon-receiver-udp.service \
+                     balloon-spectrometer-udp.service
+
+# enable: to start on bootup, start: start it right now.
+sudo systemctl enable balloon-main.service
+sudo systemctl start balloon-main.service
+
+# check status
+systemctl status balloon-main.service
+systemctl status balloon-chopper-udp.services
+
+#Check udp servers
+echo "90" | nc -u -w1  127.0.0.1 5001  
+kill udp process:
+ps aux | grep chopper_udp_server.py 
+This is supposed to be better because grep doesnt count itself:
+ps -fC python3
+
+take first number and kill -9 <PID>
+
+
+## Run analysis
+
+
+##edit files
+save current vim session with 
+:mksession balloon.vim
+and open it with
+vim -S balloon.vim
+
+
+###Electronics
+chopper needs the Vin of the sensor board to be connected to the power supply to work. the Rest is either on the sensor board on the pi or the power board.
+
+
+###Systemd explained
+Three main sections:
+[Unit], [Service] and [Install]
+After: starts [Service] only after these services are running
+Wants:  starts services, but failure has no impact on the main service.
+# stopps, restarts if main does
+PartOf=balloon-main.service
+[Service}
+
+
+[Install]
+# this service starts on startup
+WantedBy=multi-user.target

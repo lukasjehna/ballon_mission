@@ -1,0 +1,8 @@
+Three main sections:
+[Unit], [Service] and [Install]
+[Unit]:
+After: starts [Service] only after these services are running
+Wants:  starts services, but failure has no impact on the main service.
+
+
+# execute theses on startup

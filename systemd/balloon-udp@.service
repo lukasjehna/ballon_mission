@@ -1,0 +1,24 @@
+[Unit]
+Description=Balloon UDP server %i
+After=network-online.target
+Wants=network-online.target
+PartOf=balloon-main.service
+StartLimitBurst=3
+StartLimitIntervalSec=60
+
+[Service]
+Type=simple
+User=pi
+Group=pi
+WorkingDirectory=/home/pi/projects/balloon_mission
+ExecStart=/usr/bin/python3 /home/pi/projects/balloon_mission/src/%i_udp_server.py
+Restart=on-failure
+RestartSec=2
+TimeoutStopSec=5s
+ExecStartPre=/bin/mkdir -p /home/pi/projects/balloon_mission/logs
+StandardOutput=append:/home/pi/projects/balloon_mission/logs/%i_udp_server.out
+StandardError=append:/home/pi/projects/balloon_mission/logs/%i_udp_server.err
+
+[Install]
+# this service starts on startup
+WantedBy=multi-user.target

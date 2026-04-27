@@ -1,0 +1,28 @@
+# /etc/systemd/system/balloon-udp-spectrometer.service
+[Unit]
+Description=Balloon spectrometer UDP server (root)
+# waits until eth service runs.
+After=network-online.target
+Wants=network-online.target
+# stopps, restarts if main does 
+PartOf=balloon-main.service
+
+[Service]
+Type=notify
+NotifyAccess=main 
+User=root
+Group=pi
+UMask=0002
+WorkingDirectory=/home/pi/projects/balloon_mission
+ExecStart=/usr/bin/python3 /home/pi/projects/balloon_mission/src/udp/spectrometer_udp_server.py
+Restart=on-failure
+# 100ms and 90s default. So longer wait for restart and short wait before forced kill
+RestartSec=2
+TimeoutStopSec=5s
+ExecStartPre=/bin/mkdir -p /home/pi/projects/balloon_mission/logs
+StandardOutput=append:/home/pi/projects/balloon_mission/logs/spectrometer_udp_server.out
+StandardError=append:/home/pi/projects/balloon_mission/logs/spectrometer_udp_server.err
+
+[Install]
+WantedBy=multi-user.target
+

@@ -1,0 +1,6 @@
+key,value
+f_RX,235.983000GHz
+bandwidth,2GHz
+n_iterations,90
+integration_time_ms,500ms
+n_spectra,20

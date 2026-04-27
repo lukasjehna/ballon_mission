@@ -1,0 +1,5 @@
+sudo systemctl daemon-reload when chaning service files.
+Then systemclt restart <service>
+
+
+In the main service, make sure to use python3 -u for unflushed prints to get a continiuous output. Otherwise I will only get printed after exectution finishes.
