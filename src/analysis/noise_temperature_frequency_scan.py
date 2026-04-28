@@ -11,7 +11,7 @@ from pathlib import Path
 import argparse
 from typing import Optional, List, Tuple
 import tkinter as tk
-from tkinter import filedialog, messagebox
+from tkinter import filedialog
 
 import numpy as np
 import matplotlib.pyplot as plt
@@ -66,8 +66,8 @@ def main(argv: Optional[List[str]] = None) -> None:
     parser.add_argument("--bin-start", type=int, default=None, help="Start bin (inclusive) for mean. If omitted, computed from --center-freq and --bin-offset.")
     parser.add_argument("--bin-stop", type=int, default=None, help="Stop bin (inclusive) for mean. If omitted, computed from --center-freq and --bin-offset.")
     parser.add_argument("--save", type=str, default=None, help="Optional output PNG path. If omitted, figure is only shown.",)
-    parser.add_argument("--despike", action="store_true", default=None, help="Apply impulse-outlier filter to noise temperature before statistics/plotting.",)
-    parser.add_argument("--errorbars",action="store_true",default=None, help="Show error bars on plot (default: no error bars).",)
+    parser.add_argument("--despike", action="store_true", default=False, help="Apply impulse-outlier filter to noise temperature before statistics/plotting.",)
+    parser.add_argument("--errorbars",action="store_true",default=False, help="Show error bars on plot (default: no error bars).",)
     args = parser.parse_args(argv)
 
     project_root = Path(__file__).resolve().parents[2]

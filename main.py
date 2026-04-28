@@ -7,11 +7,9 @@ import sys
 import signal
 import json
 import argparse
+import numpy as np
 sys.path.append(os.path.join(os.path.dirname(__file__), 'src')) # Add src/ to path
-
-# add LED control import
 from devices import led_control
-
 os.umask(0o000) #no default restriction for files
 
 chopper=5001
@@ -27,19 +25,18 @@ SPECTROMETER_TIMEOUT = 120
 IP= '127.0.0.1'
 
 f_s_ghz = 235.710 # Signal frequeny
-f_if_start_ghz = 0.100  # 100 MHz
 f_if_step_ghz = 0.01  # 10 MHz
 
 points_per_sideband = 20
+DEFAULT_FREQ_GHZ_LIST = [235.710]
 
-# USB and LSB are defined realtive to LO. Because we use f_s its reveresed.
-DEFAULT_FREQ_GHZ_LIST = (
-    [round(f_s_ghz - f_if_start_ghz - i * f_if_step_ghz, 6)
-     for i in range(points_per_sideband)] # USB
-    +
-    [round(f_s_ghz + f_if_start_ghz + i * f_if_step_ghz, 6)
-     for i in range(points_per_sideband)] # LSB
-)
+# # USB and LSB are defined relative to LO. Because we use f_s its reversed.
+#     [round(f_s_ghz - f_if_start_ghz - i * f_if_step_ghz, 6)
+#      for i in range(points_per_sideband)] # USB
+#     +
+#     [round(f_s_ghz + f_if_start_ghz + i * f_if_step_ghz, 6)
+#      for i in range(points_per_sideband)] # LSB
+# )
 
 DEFAULT_BW = "2GHz"
 DEFAULT_INT_MS = 500
@@ -151,7 +148,18 @@ def cmd(port, command, ip=IP, noansw=0, answerTerminated=True, packetlen=1024, t
         pass
 
     return answ
-    
+
+
+def generate_linear_scan(start_ghz, stop_ghz, step_ghz):
+    return np.arange(start_ghz, stop_ghz + step_ghz / 2, step_ghz).round(6).tolist()
+
+def generate_center_scan(center_ghz, f_if_start_ghz=0.01, f_if_step_ghz=0.01, points_per_sideband=20):
+    usb = [round(center_ghz - f_if_start_ghz - i * f_if_step_ghz, 6)
+           for i in range(points_per_sideband)]
+    lsb = [round(center_ghz + f_if_start_ghz + i * f_if_step_ghz, 6)
+           for i in range(points_per_sideband)]
+    return usb + lsb
+
 def chopper_set(angle):
     # Reuse your cmd() with socketType='UDP'
     return cmd(chopper, f"{angle:.1f}\n".encode(), socketType='UDP')
@@ -231,7 +239,7 @@ def spectrometer_meas_repeated(n_cycles=1, n_spectra_per_per_cycle=1, out_dir="d
         spectrometer_meas(n_spectra=n_spectra_per_per_cycle, out_dir=out_dir)
         if _stop_requested:
             print("Stop requested, ending spectromter_meas_repeated loop.")
-            break
+            print("Stop requested, ending spectrometer_meas_repeated loop.")
 
         if i < n_cycles - 1:
             time.sleep(wait_s)
@@ -379,159 +387,116 @@ def run_hot_cold_cycles(
         print("Stop requested: exiting after the last completed hot/cold cycle.")
     else:
         print("Gas spectroscopy hot/cold cycles completed.")
-
-
-
-def run_full_measurement(
-    freq_ghz=DEFAULT_FREQ_GHZ_LIST, #f_S-f_IF = 235.71 GHz-0.2097 GHz = 235.5003 GHz = f_LO USB
-    bw=DEFAULT_BW,
-    int_ms=DEFAULT_INT_MS,
-    n_spectra=DEFAULT_N_SPECTRA,
-    n_iterations=DEFAULT_N_ITERATIONS,
-    settle_time_s=DEFAULT_SETTLE_TIME_S,
-    out_dir=DEFAULT_OUT_DIR
-):
-    """
-    - Starts continuous background measurements.
-    - Sets up Libpcap and initializes the spectrometer once at the start.
-    - Calls run_hot_cold_cycles() with one frequency at a time.
-    - Loops over all requested frequencies.
-    """
-    global _stop_requested
-    _stop_requested = False
-
-    original_sigint = signal.getsignal(signal.SIGINT)
-    signal.signal(signal.SIGINT, _sigint_handler)
-
-    # Normalize to list[float]
-    if isinstance(freq_ghz, (int, float)):
-        freq_list = [float(freq_ghz)]
-    else:
-        freq_list = [float(f) for f in freq_ghz]
-
-    # Initialize LEDs and ensure they are turned off at the end
-    red_pwm = green_pwm = blue_pwm = None
-    try:
-        red_pwm, green_pwm, blue_pwm = led_control.init_leds()
-        # set LED color (adjust values as desired)
-        led_control.set_color(red_pwm, green_pwm, blue_pwm, 0.2, 0.2, 0.2)
-
-        start_background_measurements()
-        try:
-            print("Connecting spectrometer once before frequency loop.")
-            spectrometer_connect()
-            print(f"Initializing spectrometer once: bw={bw}, int_ms={int_ms}.")
-            spectrometer_init(bw=bw, int_ms=int_ms)
-
-            for i, f_ghz in enumerate(freq_list, start=1):
-                if _stop_requested:
-                    print("Stop requested, ending frequency loop.")
-                    break
-
-                print(f"\n=== Frequency {i}/{len(freq_list)}: {f_ghz} GHz ===")
-                run_hot_cold_cycles(
-                    freq_ghz=f_ghz,
-                    bw=bw,
-                    int_ms=int_ms,
-                    n_spectra=n_spectra,
-                    n_iterations=n_iterations,
-                    settle_time_s=settle_time_s,
-                    out_dir=out_dir,
-                    connect=False,  
-                    initialize=False, 
-                )
-        finally:
-            stop_background_measurements()
-    finally:
-        if red_pwm is not None:
-            led_control.cleanup(red_pwm, green_pwm, blue_pwm)
+ 
 
 def parse_args():
     parser = argparse.ArgumentParser(
-        description="Control devices and optionally run gas spectroscopy hot/cold cycles."
+        description="Start LED control, background measurements, and/or spectrometer. Also set spectrometer parameters like frequency, bandwidth, integration time, and number of spectra/iterations. Ctrl+C will stop the spectrometer after the current hot/cold cycle finishes."
     )
 
-    # background + spectroscopy
-    parser.add_argument(
-        "--full",
-        action="store_true",
-        help="run gas spectroscopy hot/cold measurement sequence.",
-    )
+    parser.add_argument("--led", action="store_true", help="Use the LED.")
 
-    # Only background
-    parser.add_argument(
-        "--no-spectrometer",
-        action="store_true",
-        help="No connect and no initialization.",
-    )
+    parser.add_argument("--spectrometer", action="store_true", help="run gas spectroscopy hot/cold measurement sequence.")
 
-    parser.add_argument(
-        "--freq-ghz",
-        type=float,
-        nargs="+",
-        default=DEFAULT_FREQ_GHZ_LIST,
-        help="One or more receiver frequencies in GHz (default:%(default)s).",
-    )
-    parser.add_argument(
-        "--bw",
-        type=str,
-        default=DEFAULT_BW,
-        help="Spectrometer bandwidth string (default: %(default)s).",
-    )
-    parser.add_argument(
-        "--int-ms",
-        type=int,
-        default=DEFAULT_INT_MS,
-        help="Integration time in ms (default: %(default)s).",
-    )
-    parser.add_argument(
-        "--n-spectra",
-        type=int,
-        default=DEFAULT_N_SPECTRA,
-        help="Spectra per hot/cold phase (default: %(default)s).",
-    )
-    parser.add_argument(
-        "--n-iterations",
-        type=int,
-        default=DEFAULT_N_ITERATIONS,
-        help="Number of hot/cold cycles (default: %(default)s).",
-    )
-    parser.add_argument(
-        "--settle-time",
-        type=float,
-        default=DEFAULT_SETTLE_TIME_S,
-        help="Chopper settle time in seconds (default: %(default)s).",
-    )
-    parser.add_argument(
-        "--out-dir",
-        type=str,
-        default=DEFAULT_OUT_DIR,
-        help="Output directory root on spectrometer side (default: %(default)s).",
-    )
+    parser.add_argument("--background", action="store_true",help="Run pressure, temperature, gyro and telemetry background measurements.")
+
+    parser.add_argument("--freq-ghz", type=float, nargs="+", default=DEFAULT_FREQ_GHZ_LIST, help="Set one or more receiver frequencies in GHz (default:%(default)s).")
+
+    parser.add_argument("--bw", type=str, default=DEFAULT_BW, help="Spectrometer bandwidth string (default: %(default)s).")
+
+    parser.add_argument("--int-ms", type=int, default=DEFAULT_INT_MS, help="Integration time in ms (default: %(default)s).")
+
+    parser.add_argument("--n-spectra", type=int, default=DEFAULT_N_SPECTRA, help="Spectra per hot/cold phase (default: %(default)s).")
+    parser.add_argument("--n-iterations", type=int, default=DEFAULT_N_ITERATIONS, help="Number of hot/cold cycles (default: %(default)s).")
+
+    parser.add_argument("--settle-time", type=float, default=DEFAULT_SETTLE_TIME_S, help="Chopper settle time in seconds (default: %(default)s).")
+
+    parser.add_argument("--out-dir", type=str, default=DEFAULT_OUT_DIR, help="Output directory root on spectrometer side (default: %(default)s).")
+
+    scan_group = parser.add_mutually_exclusive_group()
+    scan_group.add_argument("--linear-scan", nargs=3, type=float, metavar=("START_GHZ", "STOP_GHZ", "STEP_GHZ"),
+                            help="Linear freq scan: start, stop, step (GHz). E.g., 235.0 236.0 0.01")
+    scan_group.add_argument("--center-scan", nargs=1, type=float, metavar="CENTER_GHZ",
+                            help="Sideband scan around center freq (uses defaults: f_if_start=0.01, step=0.01, points/sideband=20).")
 
     return parser.parse_args()
 
 
 def main():
+    global _stop_requested
     args = parse_args()
 
-    # Add other modes here later if needed
-    if args.full:
-        run_full_measurement(
-            freq_ghz=args.freq_ghz,
-            bw=args.bw,
-            int_ms=args.int_ms,
-            n_spectra=args.n_spectra,
-            n_iterations=args.n_iterations,
-            settle_time_s=args.settle_time,
-            out_dir=args.out_dir,
-        )
-    elif not args.no_spectrometer:
-        spectrometer_connect()
-        spectrometer_init(bw="2GHz", int_ms=500)
-        print("Libpcap connection opened. Spectrometer initialized to bw=2 GHz and int_ms=500")
-    else:
-        print("No action specified (use --full to background measurement plus gas spectroscopy).")
+    _stop_requested = False
+    original_sigint = signal.getsignal(signal.SIGINT)
+    signal.signal(signal.SIGINT, _sigint_handler)
+
+    red_pwm = green_pwm = blue_pwm = None
+    background_started = False
+    spectrometer_started = False
+
+    try:
+        if args.led:
+            try:
+                red_pwm, green_pwm, blue_pwm = led_control.init_leds()
+                led_control.set_color(red_pwm, green_pwm, blue_pwm, 0.2, 0.2, 0.2)
+            except Exception as e:
+                print(f"Error initializing LEDs: {e}")
+
+        if args.background:
+            try:
+                start_background_measurements()
+                background_started = True
+            except Exception as e:
+                print(f"Error starting background measurements: {e}")
+
+        if args.spectrometer:
+            try:
+                freq_list = [float(f) for f in args.freq_ghz]
+
+                print("Connecting spectrometer once before frequency loop.")
+                spectrometer_connect()
+                print(f"Initializing spectrometer once: bw={args.bw}, int_ms={args.int_ms}.")
+                spectrometer_init(bw=args.bw, int_ms=args.int_ms)
+                spectrometer_started = True
+
+                for i, f_ghz in enumerate(freq_list, start=1):
+                    if _stop_requested:
+                        print("Stop requested, ending frequency loop.")
+                        break
+
+                    print(f"\n=== Frequency {i}/{len(freq_list)}: {f_ghz} GHz ===")
+                    run_hot_cold_cycles(
+                        freq_ghz=f_ghz,
+                        bw=args.bw,
+                        int_ms=args.int_ms,
+                        n_spectra=args.n_spectra,
+                        n_iterations=args.n_iterations,
+                        settle_time_s=args.settle_time,
+                        out_dir=args.out_dir,
+                        connect=False,
+                        initialize=False,
+                    )
+            except Exception as e:
+                print(f"Error in spectrometer measurement: {e}")
+
+        if not (args.led or args.background or args.spectrometer):
+            print("No action specified.")
+
+    finally:
+        if background_started:
+            try:
+                stop_background_measurements()
+            except Exception as e:
+                print(f"Error stopping background measurements: {e}")
+
+        if all(pwm is not None for pwm in (red_pwm, green_pwm, blue_pwm)):
+            try:
+                led_control.cleanup(red_pwm, green_pwm, blue_pwm)
+            except Exception as e:
+                print(f"Error cleaning up LEDs: {e}")
+
+        signal.signal(signal.SIGINT, original_sigint)
+    
 
 if __name__ == "__main__":
     main()
