@@ -1,7 +1,4 @@
 #!/usr/bin/env python3
-# Quick UDP test from bash: echo "PING" | nc -u -w1 127.0.0.1 5005
-# quick tests: bash  echo "PING" | nc -u -w1 127.0.0.1 5005
-# Alternative test commands: CONN INIT 2GHz 500  MEAS 5 /tmp HOTCOLD 5 /tmp hot
 import sys
 import argparse
 import json
@@ -52,9 +49,18 @@ def _err(msg):
     ).encode("ascii")
 
 def build_parser() -> argparse.ArgumentParser:
+    epilog = (
+        "Examples:\n"
+        "Quick UDP test from bash: echo \"PING\" | nc -u -w1 127.0.0.1 5005\n"
+        "quick tests: bash  echo \"PING\" | nc -u -w1 127.0.0.1 5005\n"
+        "Alternative test commands: CONN INIT 2GHz 500  MEAS 5 /tmp HOTCOLD 5 /tmp hot"
+    )  
     parser = argparse.ArgumentParser(
-        description="Spectrometer UDP server (PmcBackend)"
+        description="Spectrometer UDP server (PmcBackend)",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog=epilog,
     )
+
     parser.add_argument("--host", default=DEFAULT_HOST, help="bind host/interface")
     parser.add_argument("--port", type=int, default=DEFAULT_PORT, help="UDP port")
     parser.add_argument("--dev", default=DEFAULT_DEV, help="device name (e.g. eth0)")
@@ -262,6 +268,7 @@ class SpectrometerState:
             "bandwidth": bw,
         }
 class SpectrometerHandler(socketserver.BaseRequestHandler):
+    server: socketserver.BaseServer
     # UDP: request == (data, socket)
     def handle(self):
         data, sock = self.request
@@ -362,6 +369,8 @@ class SpectrometerHandler(socketserver.BaseRequestHandler):
 class ThreadedUDPServer(socketserver.ThreadingMixIn, socketserver.UDPServer):
     daemon_threads = True
     allow_reuse_address = True
+    # inform the type checker that instances will have a `state`
+    state: Optional["SpectrometerState"] = None
 
 
 def main(argv=None):

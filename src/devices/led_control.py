@@ -1,9 +1,26 @@
 #!/usr/bin/env python3
-import RPi.GPIO as GPIO
+try:
+    import RPi.GPIO as GPIO
+except Exception:
+    # Dummy fallback for non-Pi development
+    class _FakeGPIO:
+        BCM = 11    # same value used by real RPi.GPIO for BCM mode
+        BOARD = 10  # same value used by real RPi.GPIO for BOARD mode
+        OUT = 1
+        IN = 0
+        def setmode(self, *a, **k): pass
+        def setup(self, *a, **k): pass
+        def PWM(self, *a, **k):
+            class _P:
+                def start(self, *_): pass
+                def ChangeDutyCycle(self, *_): pass
+                def stop(self): pass
+            return _P()
+        def cleanup(self): pass
+    GPIO = _FakeGPIO()
 import time
 import argparse
-# example:
-# led_control.py 5 --red 0.2 --green 0.2 --blue 0.2
+ 
 # =====================
 # Constants
 # =====================
@@ -17,8 +34,15 @@ PWM_FREQ = 1000   # LED PWM frequency (Hz)
 # Argument Parsing
 # =====================
 def parse_arguments():
+    epilog = (
+        "Examples:\n"
+        "led_control.py 5 --red 0.2 --green 0.2 --blue 0.2"
+    )
+        
     parser = argparse.ArgumentParser(
-        description="RGB LED control with optional blinking"
+        description="RGB LED control with optional blinking",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog=epilog,
     )
 
     parser.add_argument(

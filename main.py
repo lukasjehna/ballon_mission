@@ -1,5 +1,3 @@
-# use sudo fuser -k 5126/udp to kill a process from another shell
-# Make sure to run this with via run_python_measurement.sh to start the udp servers.
 import socket
 import time
 import os
@@ -24,20 +22,7 @@ TIMEOUT = 10
 SPECTROMETER_TIMEOUT = 120
 IP= '127.0.0.1'
 
-f_s_ghz = 235.710 # Signal frequeny
-f_if_step_ghz = 0.01  # 10 MHz
-
-points_per_sideband = 20
-DEFAULT_FREQ_GHZ_LIST = [235.710]
-
-# # USB and LSB are defined relative to LO. Because we use f_s its reversed.
-#     [round(f_s_ghz - f_if_start_ghz - i * f_if_step_ghz, 6)
-#      for i in range(points_per_sideband)] # USB
-#     +
-#     [round(f_s_ghz + f_if_start_ghz + i * f_if_step_ghz, 6)
-#      for i in range(points_per_sideband)] # LSB
-# )
-
+DEFAULT_F_RX_GHZ_LIST = [235.710]
 DEFAULT_BW = "2GHz"
 DEFAULT_INT_MS = 500
 DEFAULT_N_SPECTRA = 20
@@ -57,7 +42,7 @@ ports = {
 
 # Global flag set by Ctrl+C
 _stop_requested = False
-print("Run this python script via run_python_measurement.sh to start the device udp server.")
+#print("To use main.py directly without systemd start the udp-servers directly with start_udp_servers.sh.")
 def _sigint_handler(signum, frame):
     """
     Signal handler for SIGINT (Ctrl+C).
@@ -148,17 +133,6 @@ def cmd(port, command, ip=IP, noansw=0, answerTerminated=True, packetlen=1024, t
         pass
 
     return answ
-
-
-def generate_linear_scan(start_ghz, stop_ghz, step_ghz):
-    return np.arange(start_ghz, stop_ghz + step_ghz / 2, step_ghz).round(6).tolist()
-
-def generate_center_scan(center_ghz, f_if_start_ghz=0.01, f_if_step_ghz=0.01, points_per_sideband=20):
-    usb = [round(center_ghz - f_if_start_ghz - i * f_if_step_ghz, 6)
-           for i in range(points_per_sideband)]
-    lsb = [round(center_ghz + f_if_start_ghz + i * f_if_step_ghz, 6)
-           for i in range(points_per_sideband)]
-    return usb + lsb
 
 def chopper_set(angle):
     # Reuse your cmd() with socketType='UDP'
@@ -279,6 +253,15 @@ def spectrometer_hot_cold(n_spectra, out_dir, tag):
     tag = str(tag).lower()
     return spectrometer_control(f"HOTCOLD {int(n_spectra)} {out_dir} {tag}")
 
+def generate_linear_scan(start_ghz=225, stop_ghz=255, step_ghz=0.5):
+    return np.arange(start_ghz, stop_ghz + step_ghz / 2, step_ghz).round(6).tolist()
+
+def generate_center_scan(center_ghz=235.71, start_ghz=0.01, step_ghz=0.01, points_per_sideband=20):
+    usb = [round(center_ghz - start_ghz - i * step_ghz, 6)
+           for i in range(points_per_sideband)]
+    lsb = [round(center_ghz + start_ghz + i * step_ghz, 6)
+           for i in range(points_per_sideband)]
+    return usb + lsb
 
 def start_background_measurements():
     print("Starting background measurements (gyro, pressure, temperature, telemetry).")
@@ -296,7 +279,7 @@ def stop_background_measurements():
 
 # takes the first frequency from the list.
 def run_hot_cold_cycles(
-    freq_ghz=DEFAULT_FREQ_GHZ_LIST[0],
+    freq_ghz=DEFAULT_F_RX_GHZ_LIST[0],
     bw=DEFAULT_BW,
     int_ms=DEFAULT_INT_MS,
     n_spectra=DEFAULT_N_SPECTRA,
@@ -368,9 +351,21 @@ def run_hot_cold_cycles(
         print(f"Cycle {cycle}/{n_iterations}: HOT position (0 deg)")
         chopper_set(10)
         time.sleep(settle_time_s)
-        spectrometer_hot_cold(n_spectra=n_spectra,
-                                out_dir=session_dir,
-                                tag="hot")
+        try:
+            spectrometer_hot_cold(n_spectra=n_spectra,
+                                    out_dir=session_dir,
+                                    tag="hot")
+        except Exception as e:
+            print(f"Error during HOT measurement: {e}. Reinitializing and retrying...")
+            try:
+                spectrometer_init(bw=bw, int_ms=int_ms)
+                time.sleep(settle_time_s)
+                spectrometer_hot_cold(n_spectra=n_spectra,
+                                        out_dir=session_dir,
+                                        tag="hot")
+            except Exception as retry_e:
+                print(f"Retry failed: {retry_e}. Skipping this cycle.")
+                continue
 
         if _stop_requested:
             break
@@ -379,9 +374,21 @@ def run_hot_cold_cycles(
         print(f"Cycle {cycle}/{n_iterations}: COLD position (45 deg)")
         chopper_set(65)
         time.sleep(settle_time_s)
-        spectrometer_hot_cold(n_spectra=n_spectra,
-                                out_dir=session_dir,
-                                tag="cold")
+        try:
+            spectrometer_hot_cold(n_spectra=n_spectra,
+                                    out_dir=session_dir,
+                                    tag="cold")
+        except Exception as e:
+            print(f"Error during COLD measurement: {e}. Reinitializing and retrying...")
+            try:
+                spectrometer_init(bw=bw, int_ms=int_ms)
+                time.sleep(settle_time_s)
+                spectrometer_hot_cold(n_spectra=n_spectra,
+                                        out_dir=session_dir,
+                                        tag="cold")
+            except Exception as retry_e:
+                print(f"Retry failed: {retry_e}. Skipping this cycle.")
+                continue
 
     if _stop_requested:
         print("Stop requested: exiting after the last completed hot/cold cycle.")
@@ -390,8 +397,19 @@ def run_hot_cold_cycles(
  
 
 def parse_args():
+    epilog = (
+        "Examples:\n"
+        " Use scripts/run_services.sh to use systemd.\n"
+        " Use scripts/start_udp_servers.sh and then python3 main.py to run without systemd.\n"
+        " python3 main.py --spectrometer --f-rx-ghz 235.71 236.00 237.5"
+        " python3 main.py --spectrometer --linear-scan 225.0 255.0 0.5\n"
+        " python3 main.py --spectrometer --center-scan 235.710 0.01 0.01 20\n"
+        " use sudo fuser -k ****/udp to kill a process from another shell\n"
+    )
     parser = argparse.ArgumentParser(
-        description="Start LED control, background measurements, and/or spectrometer. Also set spectrometer parameters like frequency, bandwidth, integration time, and number of spectra/iterations. Ctrl+C will stop the spectrometer after the current hot/cold cycle finishes."
+        description="Start LED control, background measurements, and/or spectrometer. Also set spectrometer parameters like frequency, bandwidth, integration time, and number of spectra/iterations. Ctrl+C will stop the spectrometer after the current hot/cold cycle finishes.",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog=epilog,
     )
 
     parser.add_argument("--led", action="store_true", help="Use the LED.")
@@ -400,7 +418,7 @@ def parse_args():
 
     parser.add_argument("--background", action="store_true",help="Run pressure, temperature, gyro and telemetry background measurements.")
 
-    parser.add_argument("--freq-ghz", type=float, nargs="+", default=DEFAULT_FREQ_GHZ_LIST, help="Set one or more receiver frequencies in GHz (default:%(default)s).")
+    parser.add_argument("--f-rx-ghz", type=float, nargs="+", default=DEFAULT_F_RX_GHZ_LIST, help="Set one or more receiver frequencies in GHz (default:%(default)s).")
 
     parser.add_argument("--bw", type=str, default=DEFAULT_BW, help="Spectrometer bandwidth string (default: %(default)s).")
 
@@ -414,17 +432,22 @@ def parse_args():
     parser.add_argument("--out-dir", type=str, default=DEFAULT_OUT_DIR, help="Output directory root on spectrometer side (default: %(default)s).")
 
     scan_group = parser.add_mutually_exclusive_group()
-    scan_group.add_argument("--linear-scan", nargs=3, type=float, metavar=("START_GHZ", "STOP_GHZ", "STEP_GHZ"),
-                            help="Linear freq scan: start, stop, step (GHz). E.g., 235.0 236.0 0.01")
-    scan_group.add_argument("--center-scan", nargs=1, type=float, metavar="CENTER_GHZ",
-                            help="Sideband scan around center freq (uses defaults: f_if_start=0.01, step=0.01, points/sideband=20).")
+    scan_group.add_argument("--linear-scan", nargs=3, type=float, metavar=("START_GHZ", "STOP_GHZ", "STEP_GHZ"), help="Linear frequency scan in GHz: START STOP STEP." )
+    scan_group.add_argument("--center-scan", nargs=4, type=float, metavar=("CENTER_GHZ", "START_GHZ", "STEP_GHZ", "POINTS_PER_SIDEBAND"), help=
+            "Sideband scan around CENTER_GHZ. Provide CENTER_GHZ, START_GHZ (offset from center in GHz), STEP_GHZ, and POINTS_PER_SIDEBAND. ")
 
     return parser.parse_args()
-
 
 def main():
     global _stop_requested
     args = parse_args()
+
+    if getattr(args, "linear_scan", None):
+        start_ghz, stop_ghz, step_ghz = args.linear_scan
+        args.f_rx_ghz  = generate_linear_scan(start_ghz, stop_ghz, step_ghz)
+    elif getattr(args, "center_scan", None):
+        center_ghz, start_ghz, step_ghz, points_per_sideband = args.center_scan
+        args.f_rx_ghz  = generate_center_scan(center_ghz, start_ghz, step_ghz, points_per_sideband)
 
     _stop_requested = False
     original_sigint = signal.getsignal(signal.SIGINT)
@@ -451,7 +474,7 @@ def main():
 
         if args.spectrometer:
             try:
-                freq_list = [float(f) for f in args.freq_ghz]
+                freq_list = [float(f) for f in args.f_rx_ghz ]
 
                 print("Connecting spectrometer once before frequency loop.")
                 spectrometer_connect()

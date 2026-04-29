@@ -633,6 +633,7 @@ def plot_noise_temperature(
     x_axis_mode: str = "frequency",
     y_min: float = 0.0,
     y_max: float = 30000.0,
+    despike_enabled: bool = False,
 ) -> Optional[Path]:
     t_hot_k, t_cold_k = _extract_hot_cold_kelvin(header_meta)
     if t_hot_k is None or t_cold_k is None:
@@ -640,6 +641,9 @@ def plot_noise_temperature(
         return None
 
     t_noise = compute_noise_temperature(avg_hot, avg_cold, t_hot_k, t_cold_k)
+
+    if despike_enabled:
+        t_noise, _ = _despike_1d(t_noise)
 
     fig, ax = plt.subplots(figsize=(10, 5))
     x, x_label = _build_x_axis(t_noise.size, header_meta, x_axis_mode)
