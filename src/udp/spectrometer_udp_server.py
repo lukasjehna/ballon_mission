@@ -334,7 +334,7 @@ class SpectrometerHandler(socketserver.BaseRequestHandler):
                     )
 
                 out_dir = args[0]
-                n_hint = int(args[1]) if len(args) > 1 and args[1] != "None" else None
+                n_spectra = int(args[1]) if len(args) > 1 and args[1] != "None" else None
                 f_rx_ghz = float(args[2]) if len(args) > 2 and args[2] != "None" else None
                 bw_arg = args[3] if len(args) > 3 and args[3] != "None" else None
                 n_iter = int(args[4]) if len(args) > 4 and args[4] != "None" else None
@@ -342,7 +342,7 @@ class SpectrometerHandler(socketserver.BaseRequestHandler):
 
                 result = self.server.state.write_header(
                     out_dir,
-                    n_spectra_hint=n_hint,
+                    n_spectra=n_spectra,
                     f_rx_ghz=f_rx_ghz,
                     bw_override=bw_arg,
                     n_iterations=n_iter,

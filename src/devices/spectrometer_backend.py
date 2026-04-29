@@ -40,11 +40,16 @@ def dt(timestamps):
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 DATA_DIR = PROJECT_ROOT / "data"
 
-
 def _resolve_data_path(filename):
     path = Path(filename)
-    return path if path.is_absolute() else DATA_DIR / path
-
+    if path.is_absolute():
+        return path
+    # prefer project-level config/ (common layout)
+    candidate = PROJECT_ROOT / path
+    if candidate.exists():
+        return candidate
+    # fallback to data/ for bundled test data
+    return DATA_DIR / path
 
 def load(filename):
     path = _resolve_data_path(filename)
