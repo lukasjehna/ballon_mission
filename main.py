@@ -330,7 +330,7 @@ def run_hot_cold_cycles(
 
     print(
         f"Writing header CSV in '{session_dir}' "
-        f"(n_spectra_hint={n_spectra})"
+        f"(n_spectra={n_spectra})"
     )
 
     spectrometer_write_header(

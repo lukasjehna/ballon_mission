@@ -14,7 +14,8 @@ from typing import Optional, List
 import matplotlib.pyplot as plt
 
 import spectrometer_analysis_utils
-
+from file_parser_utils import parse_header_csv, choose_directory, resolve_measurement_dir_with_specs, print_header_meta
+from plotting_utility import plot_hot_cold_average, plot_noise_temperature, plot_all_hot_cold_lines
 
 def main(argv: Optional[List[str]] = None) -> None:
     parser = argparse.ArgumentParser(
@@ -77,13 +78,13 @@ def main(argv: Optional[List[str]] = None) -> None:
     default_data_dir = project_root / "data"
     if not default_data_dir.is_dir():
         default_data_dir = project_root
-    meas_dir = spectrometer_analysis_utils.choose_directory(default_data_dir)
+    meas_dir = choose_directory(default_data_dir)
 
     if meas_dir is None or not meas_dir.is_dir():
         print("No valid measurement directory selected. Exiting.")
         return
 
-    meas_dir = spectrometer_analysis_utils._resolve_measurement_dir_with_specs(meas_dir)
+    meas_dir = resolve_measurement_dir_with_specs(meas_dir)
     spec_files = sorted(meas_dir.glob("*.spec"))
     if not spec_files:
         print("No .spec files found in {}".format(meas_dir))
@@ -105,14 +106,14 @@ def main(argv: Optional[List[str]] = None) -> None:
 
     avg_hot, n_hot = spectrometer_analysis_utils.accumulate_group_average(hot_files)
     avg_cold, n_cold = spectrometer_analysis_utils.accumulate_group_average(cold_files)
-    header_meta = spectrometer_analysis_utils.parse_header_csv(meas_dir)
+    header_meta = parse_header_csv(meas_dir)
 
     if args.t_hot is not None:
         header_meta["t_hot"] = args.t_hot
     if args.t_cold is not None:
         header_meta["t_cold"] = args.t_cold
 
-    spectrometer_analysis_utils.print_header_meta(header_meta)
+    print_header_meta(header_meta)
 
     out_csv = spectrometer_analysis_utils.save_hot_cold_average_csv(
         meas_dir=meas_dir,
@@ -128,7 +129,7 @@ def main(argv: Optional[List[str]] = None) -> None:
     made_any_plot = False
 
     if args.plot_avg_spectra:
-        out_avg = spectrometer_analysis_utils.plot_hot_cold_average(
+        out_avg = plot_hot_cold_average(
             meas_dir=meas_dir,
             avg_hot=avg_hot, n_hot=n_hot,
             avg_cold=avg_cold, n_cold=n_cold,
@@ -139,7 +140,7 @@ def main(argv: Optional[List[str]] = None) -> None:
         made_any_plot = True
 
     if args.plot_noise_temp:
-        out_noise_temp = spectrometer_analysis_utils.plot_noise_temperature(
+        out_noise_temp = plot_noise_temperature(
             meas_dir=meas_dir,
             avg_hot=avg_hot,
             avg_cold=avg_cold,
@@ -152,7 +153,7 @@ def main(argv: Optional[List[str]] = None) -> None:
             made_any_plot = True
 
     if args.plot_all_spectra:
-        out_lines = spectrometer_analysis_utils.plot_all_hot_cold_lines(
+        out_lines = plot_all_hot_cold_lines(
             meas_dir=meas_dir,
             hot_files=hot_files,
             cold_files=cold_files,

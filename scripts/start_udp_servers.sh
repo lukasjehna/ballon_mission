@@ -70,7 +70,5 @@ total=$(( ${#pids_user[@]} + ${#pids_root[@]} ))
 if (( total== 0 )); then
   echo "No *_udp_server.py scripts found under src/udp/"
 fi
-sleep 5
-# Run main.py in interactive mode (script runs, then drops into REPL)
-echo "Open interactive Python session."
-python3 -i main.py
+
+

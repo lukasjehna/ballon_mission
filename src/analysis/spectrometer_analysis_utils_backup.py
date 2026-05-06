@@ -7,6 +7,7 @@ import tkinter as tk
 from tkinter import filedialog
 from typing import Optional, List, Dict, Tuple
 
+from matplotlib.axes import Axes, Figure
 import numpy as np
 import matplotlib.pyplot as plt
 
@@ -318,7 +319,7 @@ def _build_x_axis(n_bins: int, header_meta: Dict[str, str], x_axis_mode: str) ->
 
 
 def _apply_x_axis_format(
-    ax: plt.Axes,
+    ax: Axes,
     header_meta: Dict[str, str],
     x_axis_mode: str,
     default_label: str,
@@ -592,11 +593,11 @@ def save_hot_cold_average_csv(
 
 
 def add_relative_frequency_top_axis(
-    ax: plt.Axes,
+    ax: Axes,
     center_freq_ghz: float,
     label: str = "f_RX - f_center [GHz]",
     decimals: int = 3,
-) -> plt.Axes:
+) -> Axes:
     ticks = ax.get_xticks()
     ax_top = ax.twiny()
     ax_top.set_xlim(ax.get_xlim())
@@ -615,7 +616,7 @@ def launch_interactive_noise_temperature_browser(
     despike_enabled: bool = False,
     despike_window: int = 5,
     despike_sigma: float = 6.0,
-) -> Optional[plt.Figure]:
+) -> Optional[Figure]:
     if not entries:
         return None
 
