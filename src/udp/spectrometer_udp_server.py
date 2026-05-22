@@ -171,7 +171,7 @@ class SpectrometerState:
         out_path = Path(out_dir)
         _ensure_dir(out_path)
         ts = _ts()
-        fn = out_path / f"{ts}_pi_lab_header.csv"
+        fn = out_path / f"{ts}_header.csv"
 
         # Read defaults from backend (if available)
         with self.lock:
@@ -214,10 +214,14 @@ class SpectrometerState:
     def create_dir(self, out_root: str):
         """
         Create a new subdirectory inside out_root with the current timestamp
-        as its name, e.g. <out_root>/20250814151100.
+        and, if f_rx_ghz is provided.
         """
         session_ts = _ts()
-        session_dir = Path(out_root) / session_ts
+        if f_rx_ghz is None:
+            session_name = session_ts
+        else:
+            session_name = f"{session_ts}_{float(f_rx_ghz):.3f}GHz"
+        session_dir = Path(out_root) / session_name
         _ensure_dir(session_dir)
         return {
             "session_dir": str(session_dir),
@@ -355,6 +359,12 @@ class SpectrometerHandler(socketserver.BaseRequestHandler):
                 if len(args) < 1:
                     raise ValueError("usage: DIR <out_root>")
                 out_root = args[0]
+                f_rx = None
+                if len(args) > 1 and args[1] != "None":
+                    try:
+                        f_rx = float(args[1])
+                    except Exception:
+                        f_rx = None
                 result = self.server.state.create_dir(out_root)
                 resp = _ok(result)
 

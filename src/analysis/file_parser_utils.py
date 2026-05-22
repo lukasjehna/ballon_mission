@@ -4,9 +4,7 @@ import re
 import tkinter as tk
 from tkinter import filedialog
 from typing import Optional, List, Dict, Tuple
-
 import numpy as np
-
 
 def _parse_header_line(header: str) -> Dict[str, str]:
     meta: Dict[str, str] = {}
@@ -16,7 +14,6 @@ def _parse_header_line(header: str) -> Dict[str, str]:
             key, val = part.split(":", 1)
             meta[key.strip().lower()] = val.strip()
     return meta
-
 
 def _find_dedicated_header_file(spec_path: Path) -> Optional[Path]:
     stem = spec_path.stem

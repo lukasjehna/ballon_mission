@@ -19,7 +19,7 @@ temperature=5006
 telemetry=5007
 SOCKET_TYPE={'UDP':socket.SOCK_DGRAM,'TCP':socket.SOCK_STREAM}
 TIMEOUT = 10
-SPECTROMETER_TIMEOUT = 120
+SPECTROMETER_TIMEOUT = 20
 IP= '127.0.0.1'
 
 DEFAULT_F_RX_GHZ_LIST = [235.710]
@@ -27,7 +27,7 @@ DEFAULT_BW = "2GHz"
 DEFAULT_INT_MS = 500
 DEFAULT_N_SPECTRA = 20
 DEFAULT_N_ITERATIONS = 2
-DEFAULT_SETTLE_TIME_S = 2.1
+DEFAULT_SETTLE_TIME_S = 2.1 #chopper settle time.
 DEFAULT_OUT_DIR = "data/"
 
 ports = {
@@ -135,11 +135,9 @@ def cmd(port, command, ip=IP, noansw=0, answerTerminated=True, packetlen=1024, t
     return answ
 
 def chopper_set(angle):
-    # Reuse your cmd() with socketType='UDP'
     return cmd(chopper, f"{angle:.1f}\n".encode(), socketType='UDP')
 
 def receiver_set(f):
-    # Reuse your cmd() with socketType='UDP'
     return cmd(receiver, f"{f:.1f}\n".encode(), socketType='UDP')
 
 def gyro_start_continuous():
@@ -316,7 +314,7 @@ def run_hot_cold_cycles(
         print("Skipping spectrometer init (initialize=False).")
 
     print(f"Creating session directory under '{out_dir}'")
-    dir_resp = spectrometer_create_timestamp_dir(out_dir)
+    dir_resp = spectrometer_create_timestamp_dir(out_dir, f_rx_ghz=freq_ghz)
     try:
         dir_info = json.loads(dir_resp.decode("ascii"))
     except Exception as exc:
@@ -414,9 +412,9 @@ def parse_args():
 
     parser.add_argument("--led", action="store_true", help="Use the LED.")
 
-    parser.add_argument("--spectrometer", action="store_true", help="run gas spectroscopy hot/cold measurement sequence.")
-
     parser.add_argument("--background", action="store_true",help="Run pressure, temperature, gyro and telemetry background measurements.")
+
+    parser.add_argument("--spectrometer", action="store_true", help="run gas spectroscopy hot/cold measurement sequence.")
 
     parser.add_argument("--f-rx-ghz", type=float, nargs="+", default=DEFAULT_F_RX_GHZ_LIST, help="Set one or more receiver frequencies in GHz (default:%(default)s).")
 

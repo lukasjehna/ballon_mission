@@ -15,7 +15,7 @@ import matplotlib.pyplot as plt
 
 import spectrometer_analysis_utils
 from file_parser_utils import parse_header_csv, choose_directory, resolve_measurement_dir_with_specs, print_header_meta
-from plotting_utility import plot_hot_cold_average, plot_noise_temperature, plot_all_hot_cold_lines
+from plotting_utility import plot_hot_cold_average, plot_noise_temperature, plot_all_hot_cold_lines, build_x_axis
 
 def main(argv: Optional[List[str]] = None) -> None:
     parser = argparse.ArgumentParser(
@@ -70,6 +70,11 @@ def main(argv: Optional[List[str]] = None) -> None:
         "--plot-avg-spectra",
         action="store_true",
         help="Plot averaged hot and cold spectra.",
+    )
+    parser.add_argument(
+        "--browse-spectra",
+        action="store_true",
+        help="Interactively browse hot/cold spectra one pair at a time.",
     )
 
     args = parser.parse_args(argv)
@@ -163,6 +168,16 @@ def main(argv: Optional[List[str]] = None) -> None:
         print("Saved hot/cold per-file lines plot to {}".format(out_lines))
         made_any_plot = True
 
+    if args.browse_spectra:
+        _browse_spectra(
+            meas_dir=meas_dir,
+            hot_files=hot_files,
+            cold_files=cold_files,
+            header_meta=header_meta,
+            x_axis_mode=args.x_axis,
+        )
+        made_any_plot = True
+
     if made_any_plot:
         plt.show()
     else:
@@ -170,6 +185,61 @@ def main(argv: Optional[List[str]] = None) -> None:
             "No plots selected. Use one or more of: "
             "--plot-noise-temp, --plot-all-spectra, --plot-avg-spectra"
         )
+
+
+def _browse_spectra(
+    meas_dir: Path,
+    hot_files: List[Path],
+    cold_files: List[Path],
+    header_meta: dict,
+    x_axis_mode: str,
+) -> None:
+    pairs = list(zip(sorted(hot_files), sorted(cold_files)))
+    if not pairs:
+        print("No hot/cold pairs available for browsing.")
+        return
+
+    if len(hot_files) != len(cold_files):
+        print(
+            f"Warning: hot/cold count mismatch (hot={len(hot_files)}, cold={len(cold_files)}). "
+            f"Browsing {len(pairs)} pairs by index."
+        )
+
+    idx = 0
+    fig, ax = plt.subplots()
+
+    def _update_plot() -> None:
+        nonlocal idx
+        hot_path, cold_path = pairs[idx]
+        hot = spectrometer_analysis_utils.file_mean_spectrum(hot_path)
+        cold = spectrometer_analysis_utils.file_mean_spectrum(cold_path)
+
+        x_vals, x_label = build_x_axis(hot.size, header_meta, x_axis_mode=x_axis_mode)
+
+        ax.clear()
+        ax.plot(x_vals, hot, label=f"hot: {hot_path.name}", color="tab:red")
+        ax.plot(x_vals, cold, label=f"cold: {cold_path.name}", color="tab:blue")
+        ax.set_title(f"Pair {idx + 1}/{len(pairs)}")
+        ax.set_xlabel(x_label)
+        ax.set_ylabel("Mean counts^2")
+        ax.legend(loc="best")
+        ax.grid(True, alpha=0.3)
+        fig.canvas.draw_idle()
+
+    def _on_key(event) -> None:
+        nonlocal idx
+        if event.key in ("right", "n", "down", " "):
+            idx = (idx + 1) % len(pairs)
+            _update_plot()
+        elif event.key in ("left", "p", "up", "backspace"):
+            idx = (idx - 1) % len(pairs)
+            _update_plot()
+        elif event.key in ("q", "escape"):
+            plt.close(fig)
+
+    fig.canvas.mpl_connect("key_press_event", _on_key)
+    fig.suptitle("Browse hot/cold spectra (←/→ or p/n, q to quit)")
+    _update_plot()
 
 
 if __name__ == "__main__":
