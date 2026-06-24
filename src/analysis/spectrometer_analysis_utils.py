@@ -422,6 +422,43 @@ def save_hot_cold_average_csv(
 
     return out_path
 
+def accumulate_group_mean_std(files: List[Path]) -> Tuple[np.ndarray, np.ndarray, int]:
+    mean: Optional[np.ndarray] = None
+    m2: Optional[np.ndarray] = None
+    count = 0
+
+    for spec_path in files:
+        _, spectra, _ = load_spec_file(spec_path)
+        n_spectra, n_bins = spectra.shape
+        spectra_sq = spectra.astype(float) ** 2
+
+        if mean is None:
+            mean = np.zeros(n_bins, dtype=float)
+            m2 = np.zeros(n_bins, dtype=float)
+        elif mean.shape[0] != n_bins:
+            raise ValueError(
+                f"Bin count mismatch between files; {spec_path} has {n_bins} bins, expected {mean.shape[0]}"
+            )
+
+        for i in range(n_spectra):
+            x = spectra_sq[i, :]
+            count += 1
+            delta = x - mean
+            mean += delta / count
+            delta2 = x - mean
+            m2 += delta * delta2
+
+    if mean is None or m2 is None or count == 0:
+        raise ValueError("No spectra found in provided file list.")
+
+    if count < 2:
+        std = np.zeros_like(mean)
+    else:
+        var = m2 / (count - 1)
+        std = np.sqrt(np.maximum(var, 0.0))
+
+    return mean, std, count
+
 
 
 

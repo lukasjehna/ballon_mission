@@ -12,10 +12,11 @@ from pathlib import Path
 import argparse
 from typing import Optional, List
 import matplotlib.pyplot as plt
+import numpy as np
 
 import spectrometer_analysis_utils
-from file_parser_utils import parse_header_csv, choose_directory, resolve_measurement_dir_with_specs, print_header_meta
-from plotting_utility import plot_hot_cold_average, plot_noise_temperature, plot_all_hot_cold_lines, build_x_axis
+from file_parser_utils import parse_header_csv, choose_directory, resolve_measurement_dir_with_specs, print_header_meta, split_hot_cold_files
+from plotting_utility import plot_noise_temperature, plot_all_hot_cold_lines, build_x_axis
 
 def main(argv: Optional[List[str]] = None) -> None:
     parser = argparse.ArgumentParser(
@@ -67,11 +68,6 @@ def main(argv: Optional[List[str]] = None) -> None:
         help="Plot all individual hot and cold spectra.",
     )
     parser.add_argument(
-        "--plot-avg-spectra",
-        action="store_true",
-        help="Plot averaged hot and cold spectra.",
-    )
-    parser.add_argument(
         "--browse-spectra",
         action="store_true",
         help="Interactively browse hot/cold spectra one pair at a time.",
@@ -95,8 +91,7 @@ def main(argv: Optional[List[str]] = None) -> None:
         print("No .spec files found in {}".format(meas_dir))
         return
 
-    hot_files = [p for p in spec_files if "hot" in p.stem.lower()]
-    cold_files = [p for p in spec_files if "cold" in p.stem.lower()]
+    hot_files, cold_files = split_hot_cold_files(spec_files)
 
     if not hot_files:
         print("No hot .spec files found in {}".format(meas_dir))
@@ -109,8 +104,8 @@ def main(argv: Optional[List[str]] = None) -> None:
         len(hot_files), len(cold_files), meas_dir
     ))
 
-    avg_hot, n_hot = spectrometer_analysis_utils.accumulate_group_average(hot_files)
-    avg_cold, n_cold = spectrometer_analysis_utils.accumulate_group_average(cold_files)
+    avg_hot, std_hot, n_hot = spectrometer_analysis_utils.accumulate_group_mean_std(hot_files)
+    avg_cold, std_cold, n_cold = spectrometer_analysis_utils.accumulate_group_mean_std(cold_files)
     header_meta = parse_header_csv(meas_dir)
 
     if args.t_hot is not None:
@@ -132,17 +127,6 @@ def main(argv: Optional[List[str]] = None) -> None:
         return
 
     made_any_plot = False
-
-    if args.plot_avg_spectra:
-        out_avg = plot_hot_cold_average(
-            meas_dir=meas_dir,
-            avg_hot=avg_hot, n_hot=n_hot,
-            avg_cold=avg_cold, n_cold=n_cold,
-            header_meta=header_meta,
-            x_axis_mode=args.x_axis,
-        )
-        print("Saved hot/cold average plot to {}".format(out_avg))
-        made_any_plot = True
 
     if args.plot_noise_temp:
         out_noise_temp = plot_noise_temperature(
@@ -175,6 +159,10 @@ def main(argv: Optional[List[str]] = None) -> None:
             cold_files=cold_files,
             header_meta=header_meta,
             x_axis_mode=args.x_axis,
+            avg_hot=avg_hot,
+            std_hot=std_hot,
+            avg_cold=avg_cold,
+            std_cold=std_cold,
         )
         made_any_plot = True
 
@@ -183,7 +171,7 @@ def main(argv: Optional[List[str]] = None) -> None:
     else:
         print(
             "No plots selected. Use one or more of: "
-            "--plot-noise-temp, --plot-all-spectra, --plot-avg-spectra"
+            "--plot-noise-temp, --plot-all-spectra, --browse-spectra"
         )
 
 
@@ -193,6 +181,10 @@ def _browse_spectra(
     cold_files: List[Path],
     header_meta: dict,
     x_axis_mode: str,
+    avg_hot: np.ndarray,
+    std_hot: np.ndarray,
+    avg_cold: np.ndarray,
+    std_cold: np.ndarray,
 ) -> None:
     pairs = list(zip(sorted(hot_files), sorted(cold_files)))
     if not pairs:
@@ -207,6 +199,24 @@ def _browse_spectra(
 
     idx = 0
     fig, ax = plt.subplots()
+    plt.subplots_adjust(right=0.82)
+
+    from matplotlib.widgets import CheckButtons
+    state = {"show_hot": True, "show_cold": True}
+
+    ax_checks = fig.add_axes((0.84, 0.72, 0.14, 0.16))
+    checks = CheckButtons(ax_checks, ["hot", "cold"], [True, True])
+
+    def _on_check(label) -> None:
+        if label == "hot":
+            state["show_hot"] = not state["show_hot"]
+        elif label == "cold":
+            state["show_cold"] = not state["show_cold"]
+        _update_plot()
+
+    checks.on_clicked(_on_check)
+    setattr(fig, "_browse_checks", checks)
+    setattr(fig, "_browse_checks_ax", ax_checks)
 
     def _update_plot() -> None:
         nonlocal idx
@@ -217,8 +227,23 @@ def _browse_spectra(
         x_vals, x_label = build_x_axis(hot.size, header_meta, x_axis_mode=x_axis_mode)
 
         ax.clear()
-        ax.plot(x_vals, hot, label=f"hot: {hot_path.name}", color="tab:red")
-        ax.plot(x_vals, cold, label=f"cold: {cold_path.name}", color="tab:blue")
+
+        if state["show_hot"]:
+            ax.plot(x_vals, hot, label=f"hot: {hot_path.name}", color="tab:red", alpha=0.7)
+            ax.plot(x_vals, avg_hot, label="hot avg", color="tab:red", linewidth=1.5)
+            ax.fill_between(
+                x_vals, avg_hot - std_hot, avg_hot + std_hot,
+                color="tab:red", alpha=0.12, label="hot ±1σ"
+            )
+
+        if state["show_cold"]:
+            ax.plot(x_vals, cold, label=f"cold: {cold_path.name}", color="tab:blue", alpha=0.7)
+            ax.plot(x_vals, avg_cold, label="cold avg", color="tab:blue", linewidth=1.5)
+            ax.fill_between(
+                x_vals, avg_cold - std_cold, avg_cold + std_cold,
+                color="tab:blue", alpha=0.12, label="cold ±1σ"
+            )
+
         ax.set_title(f"Pair {idx + 1}/{len(pairs)}")
         ax.set_xlabel(x_label)
         ax.set_ylabel("Mean counts^2")

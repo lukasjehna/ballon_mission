@@ -216,7 +216,7 @@ def spectrometer_meas_repeated(n_cycles=1, n_spectra_per_per_cycle=1, out_dir="d
         if i < n_cycles - 1:
             time.sleep(wait_s)
 
-def spectrometer_create_timestamp_dir(out_root="data/"):
+def spectrometer_create_timestamp_dir(out_root="data/"): # maybe add frequency argument.
     return spectrometer_control(f"DIR {out_root}")
 
 def spectrometer_write_header(
@@ -314,7 +314,7 @@ def run_hot_cold_cycles(
         print("Skipping spectrometer init (initialize=False).")
 
     print(f"Creating session directory under '{out_dir}'")
-    dir_resp = spectrometer_create_timestamp_dir(out_dir, f_rx_ghz=freq_ghz)
+    dir_resp = spectrometer_create_timestamp_dir(out_dir)
     try:
         dir_info = json.loads(dir_resp.decode("ascii"))
     except Exception as exc:

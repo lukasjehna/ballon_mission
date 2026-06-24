@@ -299,3 +299,8 @@ def read_two_column_file(path, skip_header_lines=0, delimiter=None):
 	x = data[:, 0]
 	y = data[:, 1]
 	return x, y
+
+def split_hot_cold_files(spec_files: List[Path]) -> Tuple[List[Path], List[Path]]:
+    hot_files = [p for p in spec_files if "hot" in p.stem.lower()]
+    cold_files = [p for p in spec_files if "cold" in p.stem.lower()]
+    return sorted(hot_files), sorted(cold_files)

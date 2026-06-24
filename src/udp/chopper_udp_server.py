@@ -8,6 +8,7 @@ import argparse
 import signal
 import socketserver
 import threading
+from typing import Optional, cast
 #test:
 #echo "90" | nc -u 127.0.0.1 5001  
 #kill udp process:
@@ -47,7 +48,8 @@ class ChopperHandler(socketserver.BaseRequestHandler):
             angle = float(raw)
             if not (0.0 <= angle <= 180.0):
                 raise ValueError("angle out of range")
-            final_angle = self.server.servo.set_angle(angle)
+            server = cast(ThreadedUDPServer, self.server)
+            final_angle = server.servo.set_angle(angle)
             resp = f"OK {final_angle:.1f}\n".encode()
         except Exception as e:
             resp = f"ERR {str(e)}\n".encode()
@@ -56,6 +58,7 @@ class ChopperHandler(socketserver.BaseRequestHandler):
 class ThreadedUDPServer(socketserver.ThreadingMixIn, socketserver.UDPServer):
     daemon_threads = True
     allow_reuse_address = True
+    servo: Optional["ServoController"] = None
 
 def main():
     parser = argparse.ArgumentParser()
