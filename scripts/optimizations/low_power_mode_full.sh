@@ -17,6 +17,31 @@ if [ $? -ne 0 ]; then
     exit 1
 fi
 
+# Disable USB
+USB_DEVICE="1-1"
+if [ -d "/sys/bus/usb/devices/$USB_DEVICE" ]; then
+    echo "$USB_DEVICE" | tee /sys/bus/usb/drivers/usb/unbind
+    if [ $? -ne 0 ]; then
+        echo "Error: Failed to unbind USB device $USB_DEVICE."
+        exit 1
+    else
+        echo "USB device $USB_DEVICE disabled."
+    fi
+else
+    echo "Warning: USB device $USB_DEVICE not found, skipping USB disable."
+fi
+
+# Disable HDMI
+if ! command -v /opt/vc/bin/tvservice &> /dev/null; then
+    echo "Error: tvservice not found at /opt/vc/bin/tvservice."
+    exit 1
+fi
+if ! /opt/vc/bin/tvservice -o; then
+    echo "Error: Failed to disable HDMI."
+    exit 1
+else
+    echo "HDMI disabled."
+fi
 
 # Function to add or uncomment a line in config.txt
 add_or_uncomment_line() {
@@ -54,6 +79,12 @@ add_or_uncomment_line() {
 # Add or uncomment lines to disable Wi-Fi, Bluetooth, and LEDs
 add_or_uncomment_line "all" "dtoverlay=disable-wifi" "$CONFIG_FILE"
 add_or_uncomment_line "all" "dtoverlay=disable-bt" "$CONFIG_FILE"
+add_or_uncomment_line "pi4" "dtparam=pwr_led_trigger=none" "$CONFIG_FILE"
+add_or_uncomment_line "pi4" "dtparam=pwr_led_activelow=off" "$CONFIG_FILE"
+add_or_uncomment_line "pi4" "dtparam=act_led_trigger=none" "$CONFIG_FILE"
+add_or_uncomment_line "pi4" "dtparam=act_led_activelow=off" "$CONFIG_FILE"
+add_or_uncomment_line "pi4" "dtparam=eth_led0=4" "$CONFIG_FILE"
+add_or_uncomment_line "pi4" "dtparam=eth_led1=4" "$CONFIG_FILE"
 
 # Verify changes in config.txt
 echo "Verifying changes in $CONFIG_FILE..."
@@ -63,14 +94,19 @@ if grep -A 100 "^\[all\]" "$CONFIG_FILE" | grep -Fx -e "dtoverlay=disable-wifi" 
 else
     echo "Warning: Some [all] entries (Wi-Fi or Bluetooth) not found or commented."
 fi
+echo "Checking [pi4] section:"
+if grep -A 100 "^\[pi4\]" "$CONFIG_FILE" | grep -Fx -e "dtparam=pwr_led_trigger=none" -e "dtparam=pwr_led_activelow=off" -e "dtparam=act_led_trigger=none" -e "dtparam=act_led_activelow=off" -e "dtparam=eth_led0=4" -e "dtparam=eth_led1=4" | wc -l | grep -q "6"; then
+    echo "LED disable entries verified."
+else
+    echo "Warning: Some [pi4] entries (LEDs) not found or commented."
+fi
 
-reboot
 # Prompt for reboot
-#read -p "Changes require a reboot to take effect. Reboot now (y/N): " answer
-#if [ "$answer" = "y" ] || [ "$answer" = "Y" ]; then
-#    echo "Rebooting..."
-#    sleep 5
-#    reboot
-#else
-#    echo "Please reboot manually to apply changes."
-#fi
+read -p "Changes require a reboot to take effect. Reboot now (y/N): " answer
+if [ "$answer" = "y" ] || [ "$answer" = "Y" ]; then
+    echo "Rebooting..."
+    sleep 5
+    reboot
+else
+    echo "Please reboot manually to apply changes."
+fi
