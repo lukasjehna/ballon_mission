@@ -56,8 +56,13 @@ class BaseLoggerState:
     def _log_loop(self):
         self._ensure_writer()
         while not self.stop_event.is_set():
-            reading = self.read_once()
-            self._write_row(reading)
+            try:
+                reading = self.read_once()
+                self._write_row(reading)
+            except Exception as exc:
+                print(f"background logger error: {exc}", flush=True)
+                time.sleep(1.0)
+                continue
             time.sleep(self.log_interval)
 
     def _write_row(self, reading):

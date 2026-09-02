@@ -56,12 +56,17 @@ class GyroState(BaseLoggerState):
         """Read sensor frame with ISO timestamp."""
         with self.lock:
             return read_sensor_frame(address=self.address)
-
+    
     def _write_row(self, reading):
-        # Round floats for CSV
         row = {k: (round(v, 4) if isinstance(v, float) else v) for k, v in reading.items()}
         self.writer.writerow(row)
-
+        print(
+            f"{row['timestamp']} | "
+            f"gyro=({row['gyro_x_dps']:.2f},{row['gyro_y_dps']:.2f},{row['gyro_z_dps']:.2f}) dps | "
+            f"accel=({row['accel_x_g']:.3f},{row['accel_y_g']:.3f},{row['accel_z_g']:.3f}) g | "
+            f"rot=({row['rot_x_deg']:.1f},{row['rot_y_deg']:.1f}) deg",
+            flush=True,
+    )
 
 def main():
     parser = argparse.ArgumentParser(description="MPU6050 gyro UDP server.")

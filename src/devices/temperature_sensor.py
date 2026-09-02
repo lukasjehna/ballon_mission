@@ -4,7 +4,8 @@ DS18B20 1-Wire temperature logger.
 
 PEP 8 naming, unified CLI, consistent CSV:
 - File: {YYYYMMDDHHMMSS}_temperature.csv in project_root/data by default.
-- Columns: timestamp, sensor_id, temperature_c.
+- Columns: timestamp, <sensor_id>_temp_C for each detected sensor.
+- One row per timestamp with one column per sensor.
 """
 
 import argparse
@@ -20,7 +21,7 @@ DEFAULT_MEASUREMENT_INTERVAL = 13.0
 
 
 def find_sensors() -> dict:
-    paths = glob.glob(os.path.join(BASE_DIR, "28-*"))
+    paths = sorted(glob.glob(os.path.join(BASE_DIR, "28-*")))
     if not paths:
         raise RuntimeError("No 1-Wire temperature sensors found.")
     return {os.path.basename(p): os.path.join(p, "w1_slave") for p in paths}
@@ -61,7 +62,6 @@ def main():
 
     start_ts = datetime.now().strftime("%Y%m%d%H%M%S")
     out_path = data_dir / f"{start_ts}_temperature.csv"
-    fieldnames = ["timestamp", "sensor_id", "temperature_c"]
 
     try:
         sensors = find_sensors()
@@ -69,30 +69,39 @@ def main():
         print(str(e))
         return
 
+    sensor_ids = sorted(sensors.keys())
+    fieldnames = ["timestamp"] + [f"{sensor_id}_temp_C" for sensor_id in sensor_ids]
+
     writer = None
     csv_file = None
     if not args.print_only:
         csv_file = out_path.open("a", newline="", buffering=1)
-        writer = csv.writer(csv_file)
+        writer = csv.DictWriter(csv_file, fieldnames=fieldnames)
         if out_path.stat().st_size == 0:
-            writer.writerow(fieldnames)
+            writer.writeheader()
         print(f"Saving to {out_path}")
 
     t0 = time.time()
     try:
         while True:
             now_iso = datetime.now().isoformat(timespec="seconds")
+            row = {"timestamp": now_iso}
             line_parts = []
-            for sensor_id, path in sensors.items():
-                temp_c = read_temperature_c(path)
+
+            for sensor_id in sensor_ids:
+                temp_c = read_temperature_c(sensors[sensor_id])
+                column_name = f"{sensor_id}_temp_C"
+
                 if temp_c is None:
+                    row[column_name] = ""
                     line_parts.append(f"{sensor_id}: NaN")
-                    if writer:
-                        writer.writerow([now_iso, sensor_id, "NaN"])
                 else:
+                    row[column_name] = f"{temp_c:.3f}"
                     line_parts.append(f"{sensor_id}: {temp_c:.3f} C")
-                    if writer:
-                        writer.writerow([now_iso, sensor_id, f"{temp_c:.3f}"])
+
+            if writer:
+                writer.writerow(row)
+
             print(f"{now_iso} | " + " | ".join(line_parts))
 
             if args.duration is not None and (time.time() - t0) >= args.duration:
@@ -107,5 +116,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-
-

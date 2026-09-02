@@ -1,126 +1,147 @@
 #!/usr/bin/env python3
 import time
-
+import libpcap as pcap
 import matplotlib.pyplot as plt
 import numpy as np
-import argparse
-import code
-import sys
 import spectrometer_backend as pmc_backend
 
+#Test this first. The working version is on the raspberry pi.
+#sudo python3 -i src/devices/spectrometer_control.py
+#init_default_pmc()
+#setup_default_pmcc()
+#livesurement()
 
-def plot_spectrum(data, bandwidth=4, fig_num=2, normalize=False):
-    spectrum_sum = np.sum(data, 0)
+pmc = None
+
+def init_default_pmc(
+    dev_name=b"eth0",
+    window_coefficients_csv="config/wind_coeff_hamm.csv",
+):
+    global pmc
+    pmc = pmc_backend.PmcBackend(
+        dev_name,
+        window_coefficients_csv=window_coefficients_csv,
+    )
+    return pmc
+
+def setup_default_pmcc(
+    pmc_instance=None,
+    allregs_file="config/allregs.bin",
+    bw="2GHz",
+    int_time_ms=500,
+):
+    if pmc_instance is None:
+        if pmc is None:
+            raise RuntimeError(
+                "No pmc instance available. Create one first or call setup_pmcc(pmc_instance)."
+            )
+        pmc_instance = pmc
+
+    allregs = pmc_backend.load(allregs_file)
+    pmc_instance.setup_pmcc(
+        allregs,
+        bw=bw,
+        int_time_ms=int_time_ms,
+    )
+
+def spectrum_xy(data, bw=4, normalize=False, floor=1e-12):
+    spectrum_sum = np.sum(data, axis=0)
+    spectrum = np.array(spectrum_sum, dtype=float)
+
     if normalize:
-        norm = np.max(spectrum_sum)
+        norm = np.max(spectrum)
+        if norm <= 0:
+            norm = 1.0
     else:
-        norm = 1
-    spectrum = np.array(spectrum_sum / norm, dtype=float)
-    freqs = np.linspace(0, bandwidth * 1000, 8192)
+        norm = 1.0
+
+    spectrum = spectrum / norm
+    spectrum = np.maximum(spectrum, floor)
+
+    freqs = np.linspace(0, bw * 1000, len(spectrum))
+    y_vals = 20 * np.log10(spectrum)
+
+    return freqs, y_vals
+
+
+def adc_hist_data(adc):
+    return sum(adc, [])
+
+
+def plot_spectrum(data, bw=4, fig_num=2, normalize=False):
+    x_vals, y_vals = spectrum_xy(data, bw=bw, normalize=normalize)
+
     fig = plt.figure(fig_num)
-    plt.plot(freqs, np.log(spectrum) / np.log(10) * 20)
-    fig.show()
-
-
-def plot_adc(adc, *args):
-    indices = range(0, len(adc[0][:]))
-    fig = plt.figure(1)
-    for channel in adc:
-        plt.plot(indices, channel, *args)
+    plt.clf()
+    plt.plot(x_vals, y_vals)
+    plt.xlabel("Frequency [MHz]")
+    plt.ylabel("Power [dB]")
+    plt.title("Spectrum")
+    plt.grid(True)
     fig.show()
 
 
 def plot_hist(adc, nbins=32):
     fig = plt.figure()
-    adc_merged = sum(adc, [])  # unnest
+    adc_merged = adc_hist_data(adc)
     plt.hist(adc_merged, nbins, range=(0, 63))
+    plt.xlabel("ADC value")
+    plt.ylabel("Counts")
+    plt.title("ADC Histogram")
+    plt.grid(True)
     fig.show()
 
 
-def plothist(adc, nbins=32):
-    fig = plt.figure()
-    adcm = sum(adc, [])  # unnest
-    plt.hist(adcm, nbins, range=(0, 63))
-    fig.show()
-    ax.set_xlabel("Frequency [MHz]")
-    ax.set_ylabel("Power [dB]")
-    ax.set_title("Live Spectrum")
-    ax.grid(True)
+def live_measurement(pmc_instance=None, bw=4, delay=0.5, normalize=True, nbins=32):
+    if pmc_instance is None:
+        if pmc is None:
+            raise RuntimeError(
+                "No pmc instance available. Create one first or call live_measurement(pmc_instance)."
+            )
+        pmc_instance = pmc
+
+    plt.ion()
+
+    fig, (ax_spec, ax_hist) = plt.subplots(
+        2, 1, figsize=(10, 8), gridspec_kw={"height_ratios": [2, 1]}
+    )
+
+    line, = ax_spec.plot([], [])
+    ax_spec.set_xlabel("Frequency [MHz]")
+    ax_spec.set_ylabel("Power [dB]")
+    ax_spec.set_title("Live Spectrum")
+    ax_spec.grid(True)
+
+    ax_hist.set_xlabel("ADC value")
+    ax_hist.set_ylabel("Counts")
+    ax_hist.set_title("ADC Histogram")
+    ax_hist.grid(True)
 
     while True:
         try:
-            data, timestamps = pmc.meas_spectra(1)
-            spectrum = np.array(data[0], dtype=float)
-            freqs = np.linspace(0, bandwidth * 1000, len(spectrum))
-            y_vals = 20 * np.log10(spectrum / np.max(spectrum))
+            data, timestamps = pmc_instance.meas_spectra(1)
+            x_vals, y_vals = spectrum_xy(data, bw=bw, normalize=normalize)
 
-            line.set_data(freqs, y_vals)
-            ax.relim()
-            positive_mask = spectrum > 0
-            if spectrum.size == 0 or not np.any(positive_mask):
-                time.sleep(1)
-                continue
+            line.set_data(x_vals, y_vals)
+            ax_spec.relim()
+            ax_spec.autoscale_view()
 
-            max_spectrum = np.max(spectrum[positive_mask])
-            normalized_spectrum = spectrum / max_spectrum
-            normalized_spectrum = np.where(
-                normalized_spectrum > 0,
-                normalized_spectrum,
-                np.finfo(float).tiny,
-            )
-            y_vals = 20 * np.log10(normalized_spectrum)
+            adc = pmc_instance.read_adc()
+            adc_merged = adc_hist_data(adc)
+
+            ax_hist.cla()
+            ax_hist.hist(adc_merged, nbins, range=(0, 63))
+            ax_hist.set_xlabel("ADC value")
+            ax_hist.set_ylabel("Counts")
+            ax_hist.set_title("ADC Histogram")
+            ax_hist.grid(True)
+
+            fig.tight_layout()
+            plt.pause(delay)
+
         except KeyboardInterrupt:
             print("Live measurement stopped.")
             break
         except Exception as exc:
             print(f"Error during live measurement: {exc}")
             time.sleep(1)
-
-
-if __name__ == "__main__":
-    # dev_name = b'\\Device\\NPF_{8164B0EB-67A2-4A12-A97C-846787F14DD6}'  # Dell Laptop OSAS-B
-    dev_name = b"eth0"  # Raspberry Pi
-
-    epilog = (
-        "Quick interactive examples (when run with -i):\n"
-        "  pmc.connect()                                # connect to device\n"
-        "  pmc.setup_pmcc(pmc_backend.load('config/allregs.bin'), bandwidth='2GHz', int_time_ms=500)\n"
-        "  pmc.readReg(0)                               # check connection (should output 6)\n"
-        "  plothist(pmc.readADC())                      # test ADC utilization\n"
-        "  save(pmc.readAll(),'test.bin')               # save register dump\n"
-        "  d,t = pmc.meas_spectra(5); plot_spectrum(d)\n"
-        "  t  # absolute timestamps; dt(t)  # relative timestamps\n"
-    )
-
-    parser = argparse.ArgumentParser(
-        description="Spectrometer control helper",
-        epilog=epilog,
-        formatter_class=argparse.RawDescriptionHelpFormatter,
-    )
-    parser.add_argument("--connect", action="store_true", help="call pmc.connect() after startup")
-    parser.add_argument(
-        "--setup",
-        action="store_true",
-        help="load registers and run pmc.setup_pmcc using --regs/--bandwidth/--int_time_ms",
-    )
-    parser.add_argument("--regs", default="config/allregs.bin", help="registers file to load")
-    parser.add_argument("--bandwidth", default="2GHz", help="bandwidth for setup_pmcc")
-    parser.add_argument("--int_time_ms", type=int, default=500, help="integration time for setup_pmcc")
-    args = parser.parse_args()
-
-    try:
-        pmc = pmc_backend.PmcBackend(
-            dev_name,
-            window_coefficients_csv="config/wind_coeff_hamm.csv",
-        )
-    except Exception:
-        raise RuntimeError("Make sure to execute this from the project root and not from within src/")
-
-    if args.connect:
-        pmc.connect()
-
-    if args.setup:
-        pmc.setup_pmcc(pmc_backend.load(args.regs), bandwidth=args.bandwidth, int_time_ms=args.int_time_ms)
-
-
-

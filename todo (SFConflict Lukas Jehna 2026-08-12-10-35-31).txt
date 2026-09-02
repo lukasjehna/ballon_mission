@@ -1,0 +1,8 @@
+Add verbose output the spectrometer.
+https://www.perplexity.ai/search/4e585054-2dfc-488f-b6fb-3926802c1b9f
+
+background analysis. bei pressure gucken ob mbar or hpa. Die y achse ist oft auch nur ein wert. Entweder plots splitten oder mehrere achsen.
+auch die telemtry_analysis.py umbennen oder ne ausgabe hinzufügen, dass man die selber nichta ausführen sollte.
+
+Set a restart, if spectrometer gives an error.
+set gyro frequeny higher.

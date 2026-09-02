@@ -1,8 +1,7 @@
-# sensors/pressure.py
 from pathlib import Path
 
 def get_series_specs():
-    # Your CSV: time, temperature_c, humidity_pct, pressure_mbar
+    # Your CSV: time, temperature_c, humidity_pct, pressure_mbar or pressure_hpa
     return [
         {
             "column": "temperature_c",
@@ -22,6 +21,15 @@ def get_series_specs():
         },
     ]
 
+def preprocess_data(df):
+    """Normalize pressure data to mbar if it's in hpa."""
+    if "pressure_hpa" in df.columns:
+        # hPa and mbar are equivalent (1 hPa = 1 mbar)
+        df["pressure_mbar"] = df["pressure_hpa"]
+    elif "pressure_mbar" not in df.columns:
+        raise ValueError("No 'pressure_mbar' or 'pressure_hpa' column found")
+    
+    return df
+
 def default_data_dir() -> Path:
-    # e.g. you keep logs under data/
     return Path("data")

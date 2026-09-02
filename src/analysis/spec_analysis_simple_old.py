@@ -6,7 +6,7 @@ import matplotlib.pyplot as plt
 from typing import Optional, List, Dict, Tuple
 
 from background_analysis_utils import choose_file, _get_bandwidth_hz
-from spectrometer_analysis_utils import load_spec_file
+from analysis.spec_analysis_utils import load_spec_file
 
 n_bins = 8192
 

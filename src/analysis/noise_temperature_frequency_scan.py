@@ -15,18 +15,15 @@ from tkinter import filedialog
 
 import numpy as np
 import matplotlib.pyplot as plt
-from matplotlib.ticker import MaxNLocator
 
-import spectrometer_analysis_utils
-from file_parser_utils import load_spec_file, parse_header_csv, parse_frequency_ghz, parse_temperature_value, resolve_measurement_dir_with_specs
-from plotting_utility import add_relative_frequency_top_axis, launch_interactive_noise_temperature_browser
+import analysis.spec_analysis_utils as spec_analysis_utils
 
 
 def _extract_hot_cold_kelvin(header_meta: dict) -> Tuple[Optional[float], Optional[float]]:
     meta_lc = {k.lower(): v for k, v in header_meta.items()}
     t_hot_raw = meta_lc.get("t_hot") or meta_lc.get("thot")
     t_cold_raw = meta_lc.get("t_cold") or meta_lc.get("tcold")
-    return parse_temperature_value(t_hot_raw), parse_temperature_value(t_cold_raw)
+    return spec_analysis_utils._parse_temperature_value(t_hot_raw), spec_analysis_utils._parse_temperature_value(t_cold_raw)
 
 def _select_single_directory(initialdir: Path) -> Optional[Path]:
     root = tk.Tk()
@@ -47,7 +44,7 @@ def _discover_measurement_dirs(main_dir: Path) -> List[Path]:
     candidates = [main_dir] + sorted([p for p in main_dir.iterdir() if p.is_dir()])
 
     for candidate in candidates:
-        meas_dir = resolve_measurement_dir_with_specs(candidate)
+        meas_dir = spec_analysis_utils._resolve_measurement_dir_with_specs(candidate)
         key = str(meas_dir.resolve())
         if key in seen:
             continue
@@ -123,16 +120,16 @@ def main(argv: Optional[List[str]] = None) -> None:
             print(f"Skipping (missing hot/cold files): {meas_dir}")
             continue
 
-        avg_hot, _ = spectrometer_analysis_utils.accumulate_group_average(hot_files)
-        avg_cold, _ = spectrometer_analysis_utils.accumulate_group_average(cold_files)
+        avg_hot, _ = spec_analysis_utils.accumulate_group_average(hot_files)
+        avg_cold, _ = spec_analysis_utils.accumulate_group_average(cold_files)
 
-        header_meta = parse_header_csv(meas_dir)
+        header_meta = spec_analysis_utils.parse_header_csv(meas_dir)
         # Also read inline metadata from the .spec file so bandwidth is available
-        _, _, spec_meta = load_spec_file(spec_files[0])
+        _, _, spec_meta = spec_analysis_utils.load_spec_file(spec_files[0])
         header_meta = {**header_meta, **{k: str(v) for k, v in spec_meta.items() if v is not None}}
 
         meta_lc = {k.lower(): v for k, v in header_meta.items()}
-        f_rx_ghz = parse_frequency_ghz(meta_lc.get("f_rx"))
+        f_rx_ghz = spec_analysis_utils._parse_frequency_ghz(meta_lc.get("f_rx"))
         if f_rx_ghz is None:
             print(f"Skipping (missing/invalid f_RX): {meas_dir}")
             continue
@@ -149,8 +146,8 @@ def main(argv: Optional[List[str]] = None) -> None:
 
         # Compute bin window for this measurement if not explicitly provided
         if args.bin_start is None or args.bin_stop is None:
-            bw_ghz = spectrometer_analysis_utils._get_bw_ghz(header_meta)
-            bin_start, bin_stop = spectrometer_analysis_utils._compute_bin_window_from_center_freq(
+            bw_ghz = spec_analysis_utils._get_bw_ghz(header_meta)
+            bin_start, bin_stop = spec_analysis_utils._compute_bin_window_from_center_freq(
                 center_freq_ghz=args.center_freq,
                 f_rx_ghz=f_rx_ghz,
                 bandwidth_ghz=bw_ghz,
@@ -167,7 +164,7 @@ def main(argv: Optional[List[str]] = None) -> None:
         used_bin_starts.append(bin_start)
         used_bin_stops.append(bin_stop)
 
-        t_noise = spectrometer_analysis_utils.compute_noise_temperature(avg_hot, avg_cold, t_hot_k, t_cold_k)
+        t_noise = spec_analysis_utils.compute_noise_temperature(avg_hot, avg_cold, t_hot_k, t_cold_k)
 
         start = max(0, bin_start)
         stop_exclusive = min(t_noise.size, bin_stop + 1)
@@ -178,7 +175,7 @@ def main(argv: Optional[List[str]] = None) -> None:
         removed_spikes = 0
         t_noise_for_stats = t_noise
         if args.despike:
-            t_noise_for_stats, removed_spikes = spectrometer_analysis_utils.despike_1d_in_window(
+            t_noise_for_stats, removed_spikes = spec_analysis_utils._despike_1d_in_window(
                 t_noise,
                 bin_start=start,
                 bin_stop=stop_exclusive - 1,
@@ -261,12 +258,12 @@ def main(argv: Optional[List[str]] = None) -> None:
     else:
         ax.errorbar(x, y, yerr=None, **errorbar_kwargs)
 
-    ax.xaxis.set_major_locator(MaxNLocator(nbins=10))
+    ax.xaxis.set_major_locator(plt.MaxNLocator(nbins=10))
     ax.tick_params(axis="x", rotation=30, labelsize=9)
     ax.set_ylabel("Average noise temperature [K]")
     ax.set_xlabel("f_RX [GHz]")
 
-    ax_top = add_relative_frequency_top_axis(ax, center_freq_ghz)
+    ax_top = spec_analysis_utils.add_relative_frequency_top_axis(ax, center_freq_ghz)
     ax_top.tick_params(axis="x", rotation=30, labelsize=9)
 
     ax.set_title(
@@ -284,13 +281,13 @@ def main(argv: Optional[List[str]] = None) -> None:
     if args.despike:
         fig_sp, ax_sp = plt.subplots(figsize=(11, 5))
         ax_sp.plot(x, spike_counts, "o", color="tab:orange", linewidth=1.5)
-        ax_sp.xaxis.set_major_locator(MaxNLocator(nbins=10))
-        ax_sp.yaxis.set_major_locator(MaxNLocator(integer=True))
+        ax_sp.xaxis.set_major_locator(plt.MaxNLocator(nbins=10))
+        ax_sp.yaxis.set_major_locator(plt.MaxNLocator(integer=True))
         ax_sp.tick_params(axis="x", rotation=30, labelsize=9)
         ax_sp.set_ylabel("Removed spikes [count]")
         ax_sp.set_xlabel("f_RX [GHz]")
 
-        ax_sp_top = add_relative_frequency_top_axis(ax_sp, center_freq_ghz)
+        ax_sp_top = spec_analysis_utils.add_relative_frequency_top_axis(ax_sp, center_freq_ghz)
         ax_sp_top.tick_params(axis="x", rotation=30, labelsize=9)
 
         ax_sp.set_title(
@@ -312,12 +309,12 @@ def main(argv: Optional[List[str]] = None) -> None:
     summary_txt.write_text("\n".join(summary_lines) + "\n", encoding="utf-8")
     print(f"Saved summary: {summary_txt}")
 
-    browser_fig = launch_interactive_noise_temperature_browser(
+    browser_fig = spec_analysis_utils.launch_interactive_noise_temperature_browser(
         entries=interactive_noise_entries,
         bin_start=browser_bin_start,
         bin_stop=browser_bin_stop,
         despike_enabled=bool(args.despike),
-        #center_freq_ghz=args.center_freq, # add this later, for the correct averaging.
+        center_freq_ghz=args.center_freq,
     )
     if browser_fig is not None:
         print("Opened interactive noise-temperature browser (Prev/Next buttons or arrow keys).")

@@ -6,9 +6,9 @@ DS18B20 temperature UDP server.
 
 import argparse
 import csv
-from datetime import datetime
 from pathlib import Path
 import sys
+from datetime import datetime as _dt
 PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
 sys.path.insert(0, str(PROJECT_ROOT))
 from src.devices.temperature_sensor import find_sensors, read_temperature_c
@@ -22,18 +22,17 @@ from src.udp.udp_utility import (
     install_signal_shutdown,
 )
 
-
 DEFAULT_PORT = 5006
 
 
 class TemperatureState(BaseLoggerState):
     def __init__(self, log_interval=None, enable_logging=False):
-        # Discover sensors before calling BaseLoggerState to have them ready
         self.sensors = {}
         try:
             self.sensors = find_sensors()
         except Exception:
             self.sensors = {}
+        self.sensor_ids = sorted(self.sensors.keys())
         super().__init__(log_interval=log_interval, enable_logging=enable_logging)
 
     def _build_filepath(self):
@@ -42,20 +41,21 @@ class TemperatureState(BaseLoggerState):
     def _ensure_writer(self):
         if self.fp is None:
             self.fp = self.filepath.open("a", newline="", buffering=1)
-            self.writer = csv.writer(self.fp)
+            fieldnames = ["timestamp"] + [f"{sensor_id}_temp_C" for sensor_id in self.sensor_ids]
+            self.writer = csv.DictWriter(self.fp, fieldnames=fieldnames)
             if self.filepath.stat().st_size == 0:
-                self.writer.writerow(["timestamp", "sensor_id", "temperature_c"])
+                self.writer.writeheader()
 
     def list_ids(self):
-        return list(self.sensors.keys())
+        return list(self.sensor_ids)
 
     def read_once(self):
-        """Read all sensors and return dict with ISO timestamp."""
-        from datetime import datetime as _dt
+        
 
         with self.lock:
             readings = {}
-            for sensor_id, path in self.sensors.items():
+            for sensor_id in self.sensor_ids:
+                path = self.sensors[sensor_id]
                 val = read_temperature_c(path)
                 readings[sensor_id] = None if val is None else round(val, 3)
             return {
@@ -64,13 +64,22 @@ class TemperatureState(BaseLoggerState):
             }
 
     def _write_row(self, reading):
-        # Multi-sensor: expand into multiple rows.
         ts = reading["timestamp"]
-        for sensor_id, temp in reading["temperatures_c"].items():
+        row = {"timestamp": ts}
+        parts = []
+
+        for sensor_id in self.sensor_ids:
+            temp = reading["temperatures_c"].get(sensor_id)
+            column_name = f"{sensor_id}_temp_C"
             if temp is None:
-                self.writer.writerow([ts, sensor_id, "NaN"])
+                row[column_name] = ""
+                parts.append(f"{sensor_id}=NaN")
             else:
-                self.writer.writerow([ts, sensor_id, f"{temp:.3f}"])
+                row[column_name] = f"{temp:.3f}"
+                parts.append(f"{sensor_id}={temp:.3f} C")
+
+        self.writer.writerow(row)
+        print(f"{ts} | temperature | " + ", ".join(parts), flush=True)
 
 
 def main():
@@ -108,4 +117,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-

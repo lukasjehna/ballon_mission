@@ -19,15 +19,15 @@ temperature=5006
 telemetry=5007
 SOCKET_TYPE={'UDP':socket.SOCK_DGRAM,'TCP':socket.SOCK_STREAM}
 TIMEOUT = 10
-SPECTROMETER_TIMEOUT = 20
+SPECTROMETER_TIMEOUT = 30
 IP= '127.0.0.1'
 
-DEFAULT_F_RX_GHZ_LIST = [235.710]
+DEFAULT_F_RX_GHZ_LIST = [235.960]
 DEFAULT_BW = "2GHz"
 DEFAULT_INT_MS = 500
 DEFAULT_N_SPECTRA = 20
-DEFAULT_N_ITERATIONS = 2
-DEFAULT_SETTLE_TIME_S = 2.1 #chopper settle time.
+DEFAULT_N_ITERATIONS = 90 # 4000
+DEFAULT_SETTLE_TIME_S = 2.1
 DEFAULT_OUT_DIR = "data/"
 
 ports = {
@@ -53,6 +53,10 @@ def _sigint_handler(signum, frame):
     print("Ctrl+C detected: will stop after the current hot/cold cycle.")
     _stop_requested = True
 
+class UdpCommandError(RuntimeError):
+    pass
+
+
 def _cmd_preview(command, max_len=120):
     try:
         s = command.decode("utf-8", errors="replace").strip()
@@ -60,7 +64,9 @@ def _cmd_preview(command, max_len=120):
         s = repr(command)
     return s if len(s) <= max_len else s[:max_len] + "..."
 
-def cmd(port, command, ip=IP, noansw=0, answerTerminated=True, packetlen=1024, timeout=TIMEOUT, socketType='UDP'):
+
+def cmd(port, command, ip=IP, noansw=0, answerTerminated=True, packetlen=1024,
+        timeout=TIMEOUT, socketType='UDP'):
     try:
         pname = ports.get(port, str(port))
     except Exception:
@@ -80,8 +86,9 @@ def cmd(port, command, ip=IP, noansw=0, answerTerminated=True, packetlen=1024, t
                 s.connect((ip, port))
                 s.sendall(command)
         except Exception as exc:
-            print(f"cmd send error to {pname}({port}) cmd='{cmd_preview}': {exc}")
-            return b''
+            raise UdpCommandError(
+                f"cmd send error to {pname}({port}) cmd='{cmd_preview}': {exc}"
+            ) from exc
 
         if noansw:
             return b''
@@ -89,8 +96,9 @@ def cmd(port, command, ip=IP, noansw=0, answerTerminated=True, packetlen=1024, t
         try:
             data = s.recv(packetlen)
             if not data:
-                print(f"empty reply from {pname}({port}) cmd='{cmd_preview}'")
-                return b''
+                raise UdpCommandError(
+                    f"empty reply from {pname}({port}) cmd='{cmd_preview}'"
+                )
             answ += data
 
             if answerTerminated:
@@ -98,10 +106,16 @@ def cmd(port, command, ip=IP, noansw=0, answerTerminated=True, packetlen=1024, t
                     try:
                         data = s.recv(packetlen)
                         if not data:
-                            break
+                            raise UdpCommandError(
+                                f"incomplete reply from {pname}({port}) "
+                                f"cmd='{cmd_preview}', received={answ!r}"
+                            )
                         answ += data
-                    except socket.timeout:
-                        break
+                    except socket.timeout as exc:
+                        raise UdpCommandError(
+                            f"incomplete terminated reply from {pname}({port}) "
+                            f"cmd='{cmd_preview}', received={answ!r}"
+                        ) from exc
             else:
                 while len(answ) < packetlen:
                     try:
@@ -112,32 +126,39 @@ def cmd(port, command, ip=IP, noansw=0, answerTerminated=True, packetlen=1024, t
                     except socket.timeout:
                         break
 
-        except socket.timeout:
-            print(f"socket timeout on {pname}({port}) cmd='{cmd_preview}', received={answ!r}")
-            return answ
+        except socket.timeout as exc:
+            raise UdpCommandError(
+                f"socket timeout on {pname}({port}) cmd='{cmd_preview}', received={answ!r}"
+            ) from exc
+        except UdpCommandError:
+            raise
         except Exception as exc:
-            print(f"cmd recv error from {pname}({port}) cmd='{cmd_preview}': {exc}")
-            return answ
+            raise UdpCommandError(
+                f"cmd recv error from {pname}({port}) cmd='{cmd_preview}': {exc}"
+            ) from exc
 
-    # If server returns JSON status=err, print it with service name.
     try:
         txt = answ.decode("utf-8", errors="replace").strip()
         if txt.startswith("{"):
             payload = json.loads(txt)
             if isinstance(payload, dict) and payload.get("status") == "err":
-                print(
+                raise UdpCommandError(
                     f"server error from {pname}({port}) cmd='{cmd_preview}': "
                     f"{payload.get('error', payload)}"
                 )
-    except Exception:
+    except json.JSONDecodeError:
         pass
 
     return answ
 
+
+
 def chopper_set(angle):
+    # Reuse your cmd() with socketType='UDP'
     return cmd(chopper, f"{angle:.1f}\n".encode(), socketType='UDP')
 
 def receiver_set(f):
+    # Reuse your cmd() with socketType='UDP'
     return cmd(receiver, f"{f:.1f}\n".encode(), socketType='UDP')
 
 def gyro_start_continuous():
@@ -216,7 +237,7 @@ def spectrometer_meas_repeated(n_cycles=1, n_spectra_per_per_cycle=1, out_dir="d
         if i < n_cycles - 1:
             time.sleep(wait_s)
 
-def spectrometer_create_timestamp_dir(out_root="data/"): # maybe add frequency argument.
+def spectrometer_create_timestamp_dir(out_root="data/"):
     return spectrometer_control(f"DIR {out_root}")
 
 def spectrometer_write_header(
@@ -356,6 +377,8 @@ def run_hot_cold_cycles(
         except Exception as e:
             print(f"Error during HOT measurement: {e}. Reinitializing and retrying...")
             try:
+                spectrometer_connect()
+                time.sleep(1.0)
                 spectrometer_init(bw=bw, int_ms=int_ms)
                 time.sleep(settle_time_s)
                 spectrometer_hot_cold(n_spectra=n_spectra,
@@ -379,6 +402,8 @@ def run_hot_cold_cycles(
         except Exception as e:
             print(f"Error during COLD measurement: {e}. Reinitializing and retrying...")
             try:
+                spectrometer_connect()
+                time.sleep(1.0)
                 spectrometer_init(bw=bw, int_ms=int_ms)
                 time.sleep(settle_time_s)
                 spectrometer_hot_cold(n_spectra=n_spectra,
@@ -399,6 +424,7 @@ def parse_args():
         "Examples:\n"
         " Use scripts/run_services.sh to use systemd.\n"
         " Use scripts/start_udp_servers.sh and then python3 main.py to run without systemd.\n"
+        " python3 main.py --led --background --spectrometer"
         " python3 main.py --spectrometer --f-rx-ghz 235.71 236.00 237.5"
         " python3 main.py --spectrometer --linear-scan 225.0 255.0 0.5\n"
         " python3 main.py --spectrometer --center-scan 235.710 0.01 0.01 20\n"
@@ -412,9 +438,9 @@ def parse_args():
 
     parser.add_argument("--led", action="store_true", help="Use the LED.")
 
-    parser.add_argument("--background", action="store_true",help="Run pressure, temperature, gyro and telemetry background measurements.")
-
     parser.add_argument("--spectrometer", action="store_true", help="run gas spectroscopy hot/cold measurement sequence.")
+
+    parser.add_argument("--background", action="store_true",help="Run pressure, temperature, gyro and telemetry background measurements.")
 
     parser.add_argument("--f-rx-ghz", type=float, nargs="+", default=DEFAULT_F_RX_GHZ_LIST, help="Set one or more receiver frequencies in GHz (default:%(default)s).")
 
@@ -477,6 +503,7 @@ def main():
                 print("Connecting spectrometer once before frequency loop.")
                 spectrometer_connect()
                 print(f"Initializing spectrometer once: bw={args.bw}, int_ms={args.int_ms}.")
+                #time.sleep(5)
                 spectrometer_init(bw=args.bw, int_ms=args.int_ms)
                 spectrometer_started = True
 

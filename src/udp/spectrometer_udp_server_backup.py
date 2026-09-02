@@ -13,16 +13,13 @@ from datetime import datetime
 from pathlib import Path
 from typing import Optional
 import traceback
-import sdnotify
 
 # ensure project root is on sys.path so "import src.devices..." works when running the script directly
 PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
 sys.path.insert(0, str(PROJECT_ROOT))
 
-
-
 import src.devices.spectrometer_backend as pmc_backend
-from src.utility.verbose_utils import set_verbose, vprint
+import sdnotify
 CONFIG = PROJECT_ROOT / "config" / "allregs.bin"
 
 REGS = pmc_backend.load(CONFIG)
@@ -68,8 +65,11 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--host", default=DEFAULT_HOST, help="bind host/interface")
     parser.add_argument("--port", type=int, default=DEFAULT_PORT, help="UDP port")
     parser.add_argument("--dev", default=DEFAULT_DEV, help="device name (e.g. eth0)")
-    parser.add_argument("--coeff", default=DEFAULT_COEFF, help="window coefficients csv")
-    parser.add_argument("-v", "--verbose", action="store_true", help="enable verbose diagnostic output")
+    parser.add_argument(
+        "--coeff",
+        default=DEFAULT_COEFF,
+        help="window coefficients csv",
+    )
     return parser
 
 def parse_args(argv=None):
@@ -94,31 +94,20 @@ class SpectrometerState:
             )
         return {"message": "Recreated backend and reopened spectrometer link"}
 
+
+
     def init(self, bandwidth: str, int_time_ms: int):
-        last_exc = None
-        for attempt in range(5):
-            try:
-                with self.lock:
-                    self.pmc = pmc_backend.PmcBackend(
-                        self.dev_name,
-                        window_coefficients_csv=self.window_coefficients_csv,
-                    )
-                    self.pmc.setup_pmcc(
-                        REGS,
-                        bandwidth=bandwidth,
-                        int_time_ms=int(int_time_ms),
-                    )
-                return {
-                    "message": "initialized",
-                    "bandwidth": bandwidth,
-                    "int_time_ms": int(int_time_ms),
-                }
-            except Exception as exc:
-                last_exc = exc
-                time.sleep(1.5)
-        raise last_exc
-
-
+        with self.lock:
+            self.pmc.setup_pmcc(
+                REGS,
+                bandwidth=bandwidth,
+                int_time_ms=int(int_time_ms),
+            )
+        return {
+            "message": "initialized",
+            "bandwidth": bandwidth,
+            "int_time_ms": int(int_time_ms),
+        }
 
     def read_adc(self, out_dir: str, num_samples: int = 8192):
         """
@@ -405,10 +394,6 @@ def main(argv=None):
         print(f"Failed to initialize spectrometer state: {exc}",flush=True)
         traceback.print_exc()
         raise
-        
-    # lightweight readiness probe
-    with server.state.lock:
-        _ = server.state.pmc.read_reg(0)
         
     # send signal to systemd /etc/systemd/system/balloon-udp-spectrometer.service
     n = sdnotify.SystemdNotifier()

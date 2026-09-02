@@ -2,7 +2,7 @@ import argparse
 from pathlib import Path
 import matplotlib.pyplot as plt
 
-from analysis.background_analysis_utils import load_data, choose_file
+from background_analysis_utils import load_data, choose_file
 import gyro_analysis, pressure_analysis, temperature_analysis, telemetry_analysis
 
 SENSORS = {

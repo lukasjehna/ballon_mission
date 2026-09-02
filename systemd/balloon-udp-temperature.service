@@ -1,5 +1,5 @@
 [Unit]
-Description=Balloon UDP server %i
+Description=Balloon UDP server temperature
 After=network-online.target
 Wants=network-online.target
 PartOf=balloon-main.service
@@ -9,14 +9,13 @@ Type=simple
 User=pi
 Group=pi
 WorkingDirectory=/home/pi/projects/balloon_mission
-ExecStart=/usr/bin/python3 /home/pi/projects/balloon_mission/src/udp/%i_udp_server.py
+ExecStart=/usr/bin/python3 /home/pi/projects/balloon_mission/src/udp/temperature_udp_server.py --background-log
 Restart=on-failure
 RestartSec=2
 TimeoutStopSec=5s
-ExecStartPre=/bin/mkdir -p /home/pi/projects/balloon_mission/logs
 StandardOutput=journal
 StandardError=journal
-SyslogIdentifier=balloon-%i
+SyslogIdentifier=balloon-temperature
 Environment=PYTHONUNBUFFERED=1
 
 [Install]

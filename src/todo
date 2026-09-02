@@ -1,9 +1,0 @@
-spec_io.py	Read .spec files, locate header files, parse header metadata, basic file loading.
-metadata.py	Metadata normalization and conversion helpers such as parsefrequencyghz, parsetemperaturevalue, extracthotcoldkelvin, getheadervalue.
-analysis.py	Pure numerical routines like despike1d, despike1dinwindow, frequencyoffsettobinindex, computebinwindowfromcenterfreq, spectroscopyconvert, computecoldminushot, computemedianhotcolddistance.
-calibration.py	Calibration-specific math such as computenoisetemperature..., calibratespectrumtotemperature, hot/cold averaging, file mean spectrum.
-plotting.py	Non-interactive plotting only: plotspectrum, hot/cold average plots, noise temperature plots, top-axis helpers, axis formatting.
-browser.py	Interactive Matplotlib browser code with buttons/sliders like launchinteractivenoisetemperaturebrowser.
-dialogs.py	Tkinter directory/file chooser helpers such as choosedirectory. 
-
-modules should only answer one question.

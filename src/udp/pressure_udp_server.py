@@ -53,7 +53,20 @@ class PressureState(BaseLoggerState):
                 "pressure_hpa": round(pressure_hpa, 3),
             }
 
-
+    def _write_row(self, reading):
+        row = {
+            k: (round(v, 4) if isinstance(v, float) else v)
+            for k, v in reading.items()
+        }
+        self.writer.writerow(row)
+        print(
+            f"{row['timestamp']} | "
+            f"temp={row['temperature_c']:.3f} C | "
+            f"hum={row['humidity_pct']:.3f} % | "
+            f"pressure={row['pressure_hpa']:.3f} hPa",
+            flush=True,
+        )
+    
 def main():
     parser = argparse.ArgumentParser(description="MS8607 pressure UDP server.")
     parser.add_argument("--host", default=DEFAULT_HOST, help="Bind host/interface.")

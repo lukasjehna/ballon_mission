@@ -82,6 +82,24 @@ class SystemTelemetryState(BaseLoggerState):
             "throttled": throttled,
         }
         # Default BaseLoggerState._write_row() will write this dict to CSV.
+    
+    
+    def _write_row(self, reading):
+        self.writer.writerow(reading)
+
+        cpu = "NaN" if reading["cpu_temp_c"] is None else f"{reading['cpu_temp_c']:.3f} C"
+        pmic = "NaN" if reading["pmic_temp_c"] is None else f"{reading['pmic_temp_c']:.3f} C"
+        core = "NaN" if reading["core_voltage_v"] is None else f"{reading['core_voltage_v']:.4f} V"
+
+        print(
+            f"{reading['timestamp']} | "
+            f"cpu={cpu} | "
+            f"pmic={pmic} | "
+            f"passive={reading['passive_state']} | "
+            f"core={core} | "
+            f"throttled={reading['throttled']}",
+            flush=True,
+        )
 
 def main():
     parser = argparse.ArgumentParser(

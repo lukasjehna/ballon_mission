@@ -40,6 +40,7 @@ def dt(timestamps):
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 DATA_DIR = PROJECT_ROOT / "data"
 
+#remove if it causes trouble.
 def _resolve_data_path(filename):
     path = Path(filename)
     if path.is_absolute():
@@ -50,6 +51,11 @@ def _resolve_data_path(filename):
         return candidate
     # fallback to data/ for bundled test data
     return DATA_DIR / path
+
+#def _resolve_data_path(filename):
+#    path = Path(filename)
+#    return path if path.is_absolute() else DATA_DIR / path
+
 
 def load(filename):
     path = _resolve_data_path(filename)
@@ -342,7 +348,7 @@ class PmcBackend:
         self,
         allregs,
         readout_32bit=True,
-        bandwidth='4GHz',
+        bw='4GHz',
         int_time_ms=500,
         wind_bypass=False,
         autocal=False,
@@ -352,7 +358,7 @@ class PmcBackend:
         self.write_reg(1, 0b101)  # reset DSP, ->single read
 
         self.write_all(allregs)
-        self.set_bandwidth(bandwidth)
+        self.set_bandwidth(bw)
         print(self.calib_pll())
         if self.read_reg(331) == 1:
             raise Exception('PLL not locked')
