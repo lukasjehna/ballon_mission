@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 
-# Usage without a sudo kill, but it uses sudo internally anyway:
+#   try this new version which uses ctrl+c to stop the services and exit
 #   ./run_services.sh enable           # enable autostart
 #   ./run_services.sh enable --now     # enable autostart and start now
 #   ./run_services.sh start            # start now only
@@ -8,47 +8,58 @@
 
 set -euo pipefail
 
+SERVICES=(
+    balloon-udp@chopper.service
+    balloon-udp@pressure.service
+    balloon-udp@temperature.service
+    balloon-udp@gyro.service
+    balloon-udp@receiver.service
+    balloon-udp@telemetry.service
+    balloon-udp-spectrometer.service
+    balloon-main.service
+)
+
+stop_services() {
+    echo
+    echo "Stopping balloon services..."
+    sudo systemctl stop "${SERVICES[@]}"
+    echo "Services stopped."
+}
+
+trap stop_services INT TERM
+
 ARGS1="${1:-enable}"
 ARGS2="${2:-}"
 
 case "$ARGS1" in
-
-  enable)
-    ACTION=enable
-    EXTRA_FLAG=
-    if [[ "$ARGS2" == "--now" ]]; then
-      EXTRA_FLAG=--now
-    fi
-    ;;
-
-  start)
-    ACTION=start
-    EXTRA_FLAG=
-    ;;
-
-  disable)
-    ACTION=disable
-    EXTRA_FLAG=--now
-    ;;
-
-  *)
-    echo "Usage: $0 enable [--now] | start | disable" >&2
-    exit 1
-    ;;
-
+    enable)
+        if [[ "$ARGS2" == "--now" ]]; then
+            sudo systemctl enable --now "${SERVICES[@]}"
+        else
+            sudo systemctl enable "${SERVICES[@]}"
+        fi
+        ;;
+    start)
+        sudo systemctl start "${SERVICES[@]}"
+        ;;
+    restart)
+        sudo systemctl restart "${SERVICES[@]}"
+        ;;
+    stop)
+        sudo systemctl stop "${SERVICES[@]}"
+        ;;
+    disable)
+        sudo systemctl disable --now "${SERVICES[@]}"
+        ;;
+    *)
+        echo "Usage: $0 enable [--now] | start | restart | stop | disable" >&2
+        exit 1
+        ;;
 esac
 
-sudo systemctl "$ACTION" $EXTRA_FLAG balloon-udp@chopper.service \
-  balloon-udp@pressure.service \
-  balloon-udp@temperature.service \
-  balloon-udp@gyro.service \
-  balloon-udp@receiver.service \
-  balloon-udp@telemetry.service
+echo "Following logs; press Ctrl-C to stop the services..."
 
-sudo systemctl "$ACTION" $EXTRA_FLAG balloon-udp-spectrometer.service
-sudo systemctl "$ACTION" $EXTRA_FLAG balloon-main.service
-
-echo "Following logs (Ctrl-C to stop)..."
-exec sudo journalctl -fu balloon-main.service \
--u 'balloon-udp@*.service' \
--u balloon-udp-spectrometer.service
+sudo journalctl -f \
+    -u balloon-main.service \
+    -u 'balloon-udp@*.service' \
+    -u balloon-udp-spectrometer.service

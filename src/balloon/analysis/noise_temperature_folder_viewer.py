@@ -31,7 +31,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 from matplotlib.widgets import Button, TextBox
 
-import spec_analysis_utils as sau
+import balloon.analysis.spec_analysis_utils as sau
 
 STAMP_RE = re.compile(r"^(\d{14})")
 LOAD_RE = re.compile(r"(hot|cold)$", re.IGNORECASE)

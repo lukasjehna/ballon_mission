@@ -27,7 +27,6 @@ set mouse=a
 set nrformats=bin,hex
 set printoptions=paper:a4
 set ruler
-set runtimepath=~/.vim,/var/lib/vim/addons,/usr/share/vim/vimfiles,/usr/share/vim/vim81,/usr/share/vim/vimfiles/after,/var/lib/vim/addons/after,~/.vim/after
 set scrolloff=5
 set shiftwidth=4
 set showcmd
@@ -42,22 +41,14 @@ let s:so_save = &so | let s:siso_save = &siso | set so=0 siso=0
 let v:this_session=expand("<sfile>:p")
 silent only
 silent tabonly
-cd /home/pi/projects/balloon_mission
+execute 'cd ' . fnameescape(expand('<sfile>:p:h'))
 if expand('%') == '' && !&modified && line('$') <= 1 && getline(1) == ''
   let s:wipebuf = bufnr('%')
 endif
 set shortmess=aoO
 argglobal
-%argdel
-$argadd scripts/*.sh
-$argadd *.py
-$argadd src/**/*.py
-$argadd /etc/systemd/system/balloon-main.service
-$argadd /etc/systemd/system/balloon-udp-spectrometer.service
-$argadd /etc/systemd/system/balloon-udp@.service
-$argadd docs/*
-$argadd config/README
 edit README
+setlocal filetype=markdown
 set splitbelow splitright
 wincmd _ | wincmd |
 split
@@ -186,7 +177,6 @@ endif
 setlocal tabstop=4
 setlocal tagcase=
 setlocal tags=
-setlocal termmode=
 setlocal termwinkey=
 setlocal termwinscroll=10000
 setlocal termwinsize=
@@ -209,7 +199,6 @@ normal! zt
 normal! 0
 wincmd w
 argglobal
-if bufexists("/etc/systemd/system/balloon-udp@.service") | buffer /etc/systemd/system/balloon-udp@.service | else | edit /etc/systemd/system/balloon-udp@.service | endif
 setlocal keymap=
 setlocal noarabic
 setlocal autoindent
@@ -315,7 +304,6 @@ endif
 setlocal tabstop=4
 setlocal tagcase=
 setlocal tags=
-setlocal termmode=
 setlocal termwinkey=
 setlocal termwinscroll=10000
 setlocal termwinsize=
@@ -444,7 +432,6 @@ endif
 setlocal tabstop=4
 setlocal tagcase=
 setlocal tags=
-setlocal termmode=
 setlocal termwinkey=
 setlocal termwinscroll=10000
 setlocal termwinsize=
@@ -471,48 +458,24 @@ exe '2resize ' . ((&lines * 38 + 30) / 61)
 exe 'vert 2resize ' . ((&columns * 118 + 119) / 238)
 exe '3resize ' . ((&lines * 20 + 30) / 61)
 tabnext 1
-badd +1 kill_udp_servers.sh
-badd +1 open_vim.sh
-badd +1 run_python_measurement.sh
-badd +1 run_services.sh
-badd +1 run_analysis.py
-badd +1 run_hot_cold_analysis.py
-badd +36 run_measurement.py
-badd +1 run_spectrometer_analysis_index_range.py
-badd +1 run_spectrometer_analysis_simple.py
-badd +1 src/analysis_core.py
-badd +1 src/chopper_control.py
-badd +1 src/chopper_udp_server.py
-badd +1 src/gyro_analysis.py
-badd +1 src/gyro_sensor.py
-badd +1 src/gyro_udp_server.py
-badd +1 src/led_control_old.py
-badd +1 src/led_control.py
-badd +1 src/led_simple.py
-badd +1 src/led_udp_server.py
-badd +1 src/pressure_analysis.py
-badd +1 src/pressure_sensor.py
-badd +1 src/pressure_udp_server.py
-badd +1 src/receiver_control.py
-badd +1 src/receiver_udp_server.py
-badd +1 src/spectrometer_analysis.py
-badd +1 src/spectrometer_backend.py
-badd +1 src/spectrometer_control.py
-badd +1 src/spectrometer_udp_server.py
-badd +1 src/telemetry_sensor.py
-badd +1 src/telemetry_udp_server.py
-badd +1 src/temperature_analysis.py
-badd +1 src/temperature_sensor.py
-badd +1 src/temperature_udp_server.py
-badd +1 src/udp_utility.py
-badd +26 /etc/systemd/system/balloon-main.service
-badd +11 /etc/systemd/system/balloon-udp-spectrometer.service
-badd +1 /etc/systemd/system/balloon-udp@.service
-badd +1 docs/cheat_sheet_and_spectrometer_pi.txt
-badd +1 docs/cheat_sheet.txt
-badd +1 docs/systemd
-badd +1 docs/systemd_diagnostics
-badd +26 docs/todo
+badd +1 main.py
+
+for f in glob('scripts/*', 0, 1) "0 means normal suffic handling, 1 means return this as a vim list instead of a newline seperated list
+  execute 'badd +1 ' . fnameescape(f)
+endfor
+
+for f in glob('systemd/*', 0, 1) 
+  execute 'badd +1 ' . fnameescape(f)
+endfor
+
+for f in glob('docs/*', 0, 1) 
+  execute 'badd +1 ' . fnameescape(f)
+endfor
+
+for f in glob('src/balloon/**/*.py', 0, 1)
+  execute 'badd +1 ' . fnameescape(f)
+endfor
+
 badd +1 config/README
 badd +0 README
 if exists('s:wipebuf') && len(win_findbuf(s:wipebuf)) == 0

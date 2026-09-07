@@ -54,7 +54,6 @@ save current vim session with
 and open it with
 vim -S balloon.vim
 
-
 ###Electronics
 chopper needs the Vin of the sensor board to be connected to the power supply to work. the Rest is either on the sensor board on the pi or the power board.
 

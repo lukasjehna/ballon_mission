@@ -12,9 +12,8 @@ all spectra within those files are paired by index.
 No temperature input is required; the plotted quantity is Y = P_hot / P_cold.
 
 Examples:
-    python3 y_factor_all_dumps_over_time.py /path/to/measurement
-    python3 y_factor_all_dumps_over_time.py /path/to/measurement \\
-        --if-frequency 270 --n-points 5 --output y_factor_all_dumps.png
+    python3 y_factor_all_dumps_over_time.py /path/to/measurement --output y_factor_all_dumps.png
+    python3 src/analysis/y_factor_all_dumps_over_time.py --if-frequency 270 --n-points 5
 """
 from __future__ import annotations
 
